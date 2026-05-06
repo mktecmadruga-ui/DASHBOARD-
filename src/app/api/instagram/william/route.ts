@@ -10,7 +10,13 @@ export async function GET() {
   ]);
 
   if (!profile) {
-    return Response.json({ error: "Erro ao buscar dados do @williamnmadruga" }, { status: 500 });
+    // Token expirado ou não configurado — retorna 200 com flag para o frontend exibir aviso
+    return Response.json({
+      error: "token_expired",
+      message: "Token do @williamnmadruga expirado. Gere um novo token IGAA via Instagram Basic Display API.",
+      profile: null,
+      media: [],
+    }, { status: 200 });
   }
 
   return Response.json(

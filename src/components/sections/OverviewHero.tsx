@@ -7,6 +7,7 @@ import { useAccount } from "@/context/AccountContext";
 import { usePeriod } from "@/context/PeriodContext";
 import type { KPI } from "@/types";
 import type { InstagramProfile, InstagramMedia } from "@/lib/instagram-api";
+import { AlertTriangle } from "lucide-react";
 
 // Scale factor vs 30-day baseline for each period
 const periodScale: Record<string, number> = {
@@ -24,13 +25,16 @@ export default function OverviewHero() {
   const { account } = useAccount();
   const { period } = usePeriod();
   const slug = account.id === "william" ? "william" : "madruga";
-  const [profile, setProfile] = useState<InstagramProfile | null>(null);
-  const [media, setMedia]     = useState<InstagramMedia[]>([]);
+  const [profile, setProfile]         = useState<InstagramProfile | null>(null);
+  const [media, setMedia]             = useState<InstagramMedia[]>([]);
+  const [tokenExpired, setTokenExpired] = useState(false);
 
   useEffect(() => {
+    setTokenExpired(false);
     fetch(`/api/instagram/${slug}`)
       .then((r) => r.json())
       .then((data) => {
+        if (data.error === "token_expired") { setTokenExpired(true); return; }
         if (data.profile) setProfile(data.profile);
         if (data.media)   setMedia(data.media);
       })
@@ -68,6 +72,17 @@ export default function OverviewHero() {
 
   return (
     <section>
+      {tokenExpired && (
+        <div className="flex items-start gap-3 mb-4 px-4 py-3 rounded-2xl bg-warning/10 border border-warning/30">
+          <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-warning">Token do Instagram expirado</p>
+            <p className="text-xs text-warning/80 mt-0.5">
+              Gere um novo token IGAA para <strong>@williamnmadruga</strong> via <strong>Instagram Basic Display API</strong> no painel de desenvolvedores do Facebook e atualize a variável <code>NEXT_PUBLIC_INSTAGRAM_TOKEN_WILLIAM</code> na Vercel.
+            </p>
+          </div>
+        </div>
+      )}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
