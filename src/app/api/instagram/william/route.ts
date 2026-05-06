@@ -1,7 +1,7 @@
 import { fetchProfile, fetchMedia } from "@/lib/instagram-api";
 
 // Revalidate every 2 days (172800 seconds)
-export const revalidate = 172800;
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const [profile, media] = await Promise.all([
