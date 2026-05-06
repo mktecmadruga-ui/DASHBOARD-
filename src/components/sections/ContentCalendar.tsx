@@ -1,0 +1,752 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import Card from "@/components/ui/Card";
+import Modal from "@/components/ui/Modal";
+import { cn } from "@/lib/utils";
+import { useAccount } from "@/context/AccountContext";
+import {
+  ChevronLeft, ChevronRight, Sparkles, Loader2,
+  Copy, Check, Hash, AlignLeft, FileText, Globe,
+  Upload, X as XIcon, Image as ImageIcon, Clock, Send,
+  CheckCircle2, AlertCircle,
+} from "lucide-react";
+import type { CalendarEvent } from "@/types";
+
+// ─── Per-profile storage keys ─────────────────────────────────────────────────
+const storageKey = (slug: string) => `calendar_events_v3_${slug}`;
+
+// ─── Suggested posting times (from real engagement analysis) ─────────────────
+const SUGGESTED_TIMES = [
+  { label: "08h",  value: "08:00", tip: "Pico matinal"      },
+  { label: "12h",  value: "12:00", tip: "Almoço"            },
+  { label: "18h",  value: "18:00", tip: "⭐ Melhor horário"  },
+  { label: "20h",  value: "20:00", tip: "Noite — alto eng." },
+  { label: "21h",  value: "21:00", tip: "Pico noturno"      },
+];
+
+const defaultEventsWilliam: CalendarEvent[] = [
+  { id: "w1", titulo: "Split Payment Pix — impacto no CNPJ", data: "2026-05-06", tipo: "reel",      status: "agendado",  scheduledAt: "2026-05-06T18:00" },
+  { id: "w2", titulo: "5 erros na declaração do IR",          data: "2026-05-07", tipo: "carrossel", status: "criativo" },
+  { id: "w3", titulo: "Story: Enquete — você já pagou multa?",data: "2026-05-07", tipo: "story",     status: "roteiro"  },
+  { id: "w4", titulo: "Escala 6x1 — quem paga a conta?",     data: "2026-05-08", tipo: "reel",      status: "agendado",  scheduledAt: "2026-05-08T18:00" },
+  { id: "w5", titulo: "Feed: Reflexão do empresário",        data: "2026-05-09", tipo: "feed",      status: "rascunho" },
+];
+
+const defaultEventsMadruga: CalendarEvent[] = [
+  { id: "m1", titulo: "Abertura de empresa — passo a passo", data: "2026-05-06", tipo: "carrossel", status: "agendado",  scheduledAt: "2026-05-06T18:00" },
+  { id: "m2", titulo: "Reel: Quanto custa ter um CNPJ?",     data: "2026-05-07", tipo: "reel",      status: "criativo" },
+  { id: "m3", titulo: "Story: Dica fiscal do dia",           data: "2026-05-08", tipo: "story",     status: "roteiro"  },
+  { id: "m4", titulo: "Feed: Regime tributário ideal",       data: "2026-05-09", tipo: "feed",      status: "rascunho" },
+];
+
+const typeColors: Record<string, string> = {
+  reel:      "bg-primary/15 text-primary border-primary/20",
+  carrossel: "bg-info/15 text-info border-info/20",
+  story:     "bg-warning/15 text-warning border-warning/20",
+  feed:      "bg-success/15 text-success border-success/20",
+};
+const statusDot: Record<string, string> = {
+  rascunho: "bg-slate-400", roteiro: "bg-warning",
+  criativo: "bg-info",      agendado: "bg-success", publicado: "bg-primary",
+};
+
+const DAYS  = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+const MONTHS= ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+const tipoOpts: { value: CalendarEvent["tipo"]; label: string }[] = [
+  { value:"reel",      label:"Reels"     },
+  { value:"carrossel", label:"Carrossel" },
+  { value:"story",     label:"Story"     },
+  { value:"feed",      label:"Feed"      },
+];
+const statusOpts: { value: CalendarEvent["status"]; label: string }[] = [
+  { value:"rascunho",  label:"Rascunho"       },
+  { value:"roteiro",   label:"Roteiro pronto" },
+  { value:"criativo",  label:"Criativo pronto"},
+  { value:"agendado",  label:"Agendado"       },
+  { value:"publicado", label:"Publicado"      },
+];
+
+type AITab = "copy"|"legenda"|"hashtags";
+
+function toStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function getMonday(d: Date) {
+  const day = d.getDay(), diff = day===0?-6:1-day, m = new Date(d);
+  m.setDate(d.getDate()+diff); m.setHours(0,0,0,0); return m;
+}
+
+// ─── Persistent events hook (per-profile) ────────────────────────────────────
+function usePersistedEvents(slug: string) {
+  const defaults = slug === "william" ? defaultEventsWilliam : defaultEventsMadruga;
+  const [events, setEventsRaw] = useState<CalendarEvent[]>(defaults);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey(slug));
+      if (stored) setEventsRaw(JSON.parse(stored) as CalendarEvent[]);
+      else        setEventsRaw(defaults);
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  function setEvents(updater: CalendarEvent[] | ((prev: CalendarEvent[]) => CalendarEvent[])) {
+    setEventsRaw(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try { localStorage.setItem(storageKey(slug), JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
+  return [events, setEvents] as const;
+}
+
+// ─── Copy button ──────────────────────────────────────────────────────────────
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button type="button" onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),2000); }}
+      className="flex items-center gap-1 text-xs text-text-light hover:text-primary transition-colors cursor-pointer">
+      {copied ? <Check className="w-3 h-3 text-success"/> : <Copy className="w-3 h-3"/>}
+      {copied ? "Copiado!" : "Copiar"}
+    </button>
+  );
+}
+
+// ─── Auto-post scheduler ──────────────────────────────────────────────────────
+function useAutoPublisher(
+  events: CalendarEvent[],
+  setEvents: (u: CalendarEvent[] | ((p: CalendarEvent[]) => CalendarEvent[])) => void,
+  slug: string
+) {
+  const [publishing, setPublishing] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<{ id: string; success: boolean; msg: string } | null>(null);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const now = new Date();
+      const due = events.find(ev => {
+        if (ev.status !== "agendado" || !ev.scheduledAt) return false;
+        // Só publica se tiver pelo menos 1 criativo anexado
+        const hasCreative = !!(ev.creatives?.length || ev.creative);
+        if (!hasCreative) return false;
+        const scheduled = new Date(ev.scheduledAt);
+        return scheduled <= now;
+      });
+      if (!due) return;
+
+      setPublishing(due.id);
+      try {
+        // Build caption: legenda + hashtags
+        const hashtagStr = due.hashtags?.length ? "\n\n" + due.hashtags.map(h=>`#${h}`).join(" ") : "";
+        const caption    = (due.legenda ?? due.titulo) + hashtagStr;
+
+        const firstCreative = due.creatives?.[0];
+        if (!firstCreative) { setPublishing(null); return; }
+
+        // Step 1 — upload criativo para URL pública (Instagram não aceita base64)
+        let mediaUrl = firstCreative.dataUrl;
+        if (firstCreative.dataUrl.startsWith("data:")) {
+          const upRes  = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dataUrl: firstCreative.dataUrl, name: firstCreative.name }),
+          });
+          const upData = await upRes.json();
+          if (!upRes.ok || !upData.url) {
+            setLastResult({ id: due.id, success: false, msg: `"${due.titulo}" — falha no upload do criativo.` });
+            setPublishing(null);
+            return;
+          }
+          mediaUrl = upData.url;
+        }
+
+        // Step 2 — publicar no Instagram com a URL pública
+        const isVideo   = firstCreative.dataUrl.startsWith("data:video") || /\.(mp4|mov)$/i.test(firstCreative.name);
+        const publishRes = await fetch("/api/instagram/publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug,
+            caption,
+            mediaType: isVideo ? "REELS" : "IMAGE",
+            ...(isVideo ? { videoUrl: mediaUrl } : { imageUrl: mediaUrl }),
+          }),
+        });
+        const data = await publishRes.json();
+
+        if (data.success) {
+          setEvents(prev => prev.map(e => e.id === due.id ? { ...e, status: "publicado" as const } : e));
+          setLastResult({ id: due.id, success: true, msg: `"${due.titulo}" publicado com sucesso! 🎉` });
+        } else if (data.setup_required) {
+          // Tokens não configurados ainda — ignora silenciosamente
+          setPublishing(null);
+          return;
+        } else {
+          setLastResult({ id: due.id, success: false, msg: `"${due.titulo}" — ${data.error ?? "Erro desconhecido"}` });
+        }
+      } catch (e) {
+        console.error("Auto-publish error:", e);
+      } finally {
+        setPublishing(null);
+      }
+    }, 30_000); // check every 30s
+
+    return () => clearInterval(interval);
+  }, [events, setEvents, slug]);
+
+  return { publishing, lastResult, dismissResult: () => setLastResult(null) };
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+export default function ContentCalendar() {
+  const { account } = useAccount();
+  const slug = account.id === "william" ? "william" : "madruga";
+
+  const [events, setEvents] = usePersistedEvents(slug);
+  const { publishing, lastResult, dismissResult } = useAutoPublisher(events, setEvents, slug);
+
+  const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selected, setSelected]   = useState<CalendarEvent | null>(null);
+
+  // form fields
+  const [titulo, setTitulo]           = useState("");
+  const [data,   setData]             = useState(toStr(new Date()));
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [tipo,   setTipo]             = useState<CalendarEvent["tipo"]>("reel");
+  const [status, setStatus]           = useState<CalendarEvent["status"]>("agendado");
+  const [prompt, setPrompt]           = useState("");
+
+  // creatives
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [creatives, setCreatives] = useState<{ dataUrl: string; name: string }[]>([]);
+  const [lightbox, setLightbox]   = useState<string | null>(null);
+
+  // AI
+  const [aiLoading,    setAiLoading]    = useState(false);
+  const [aiError,      setAiError]      = useState("");
+  const [aiCopy,       setAiCopy]       = useState("");
+  const [aiLegenda,    setAiLegenda]    = useState("");
+  const [aiHashtags,   setAiHashtags]   = useState<string[]>([]);
+  const [aiResearched, setAiResearched] = useState(false);
+  const [activeTab,    setActiveTab]    = useState<AITab>("copy");
+
+  const hasAI = !!(aiCopy || aiLegenda || aiHashtags.length);
+
+  const days     = Array.from({length:7},(_,i)=>{ const d=new Date(weekStart); d.setDate(weekStart.getDate()+i); return d; });
+  const todayStr = toStr(new Date());
+
+  function prevWeek(){ setWeekStart(w=>{ const d=new Date(w); d.setDate(d.getDate()-7); return d; }); }
+  function nextWeek(){ setWeekStart(w=>{ const d=new Date(w); d.setDate(d.getDate()+7); return d; }); }
+  function goToday() { setWeekStart(getMonday(new Date())); }
+
+  function resetAI() {
+    setAiCopy(""); setAiLegenda(""); setAiHashtags([]);
+    setAiError(""); setPrompt(""); setAiResearched(false);
+  }
+
+  function openNew(dateStr?: string) {
+    setSelected(null); setTitulo(""); setData(dateStr ?? todayStr);
+    setScheduledAt(dateStr ? `${dateStr}T18:00` : "");
+    setTipo("reel"); setStatus("agendado"); resetAI();
+    setCreatives([]);
+    setModalOpen(true);
+  }
+
+  function openEdit(ev: CalendarEvent) {
+    setSelected(ev); setTitulo(ev.titulo); setData(ev.data);
+    setScheduledAt(ev.scheduledAt ?? "");
+    setTipo(ev.tipo); setStatus(ev.status); setPrompt(ev.prompt ?? "");
+    setAiCopy(ev.copy ?? ""); setAiLegenda(ev.legenda ?? "");
+    setAiHashtags(ev.hashtags ?? []); setAiError(""); setActiveTab("copy");
+    setAiResearched(false);
+    const saved = ev.creatives ?? (ev.creative ? [{ dataUrl: ev.creative, name: ev.creativeName ?? "criativo" }] : []);
+    setCreatives(saved);
+    setModalOpen(true);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    const remaining = 10 - creatives.length;
+    files.slice(0, remaining).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const dataUrl = ev.target?.result as string;
+        setCreatives(prev => [...prev, { dataUrl, name: file.name }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = "";
+  }
+
+  async function generateAI() {
+    if (!titulo.trim() || !prompt.trim()) return;
+    setAiLoading(true); setAiError("");
+    try {
+      const res  = await fetch("/api/ai/generate-content", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ titulo, tipo, prompt }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro desconhecido");
+      setAiCopy(json.copy ?? ""); setAiLegenda(json.legenda ?? "");
+      setAiHashtags(json.hashtags ?? []); setAiResearched(json.researchUsed ?? false);
+      setActiveTab("copy");
+    } catch(e: unknown) {
+      setAiError(e instanceof Error ? e.message : "Erro ao gerar conteúdo");
+    } finally { setAiLoading(false); }
+  }
+
+  function save() {
+    if (!titulo.trim()) return;
+    const ev: CalendarEvent = {
+      id: selected?.id ?? `c${Date.now()}`,
+      titulo, data, tipo, status,
+      ...(scheduledAt  && { scheduledAt }),
+      ...(prompt       && { prompt }),
+      ...(aiCopy       && { copy: aiCopy }),
+      ...(aiLegenda    && { legenda: aiLegenda }),
+      ...(aiHashtags.length && { hashtags: aiHashtags }),
+      ...(creatives.length  && { creatives }),
+    };
+    setEvents(prev => selected
+      ? prev.map(e => e.id === selected.id ? ev : e)
+      : [...prev, ev]);
+    setModalOpen(false);
+  }
+
+  function remove() {
+    if (!selected) return;
+    setEvents(prev => prev.filter(e => e.id !== selected.id));
+    setModalOpen(false);
+  }
+
+  const startLabel = `${days[0].getDate()} ${MONTHS[days[0].getMonth()]}`;
+  const endLabel   = `${days[6].getDate()} ${MONTHS[days[6].getMonth()]} ${days[6].getFullYear()}`;
+
+  return (
+    <>
+      <Card delay={0.6}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-lg font-semibold text-text-dark">Calendário de Conteúdo</h3>
+            <p className="text-sm text-text-light mt-0.5">{startLabel} – {endLabel}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={goToday}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 text-text-medium hover:bg-slate-50 cursor-pointer transition-colors">
+              Hoje
+            </button>
+            <div className="flex border border-slate-200 rounded-xl overflow-hidden">
+              <button type="button" onClick={prevWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors">
+                <ChevronLeft className="w-4 h-4 text-text-medium"/>
+              </button>
+              <button type="button" onClick={nextWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors border-l border-slate-200">
+                <ChevronRight className="w-4 h-4 text-text-medium"/>
+              </button>
+            </div>
+            <button type="button" onClick={()=>openNew()}
+              className="px-3 py-1.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity">
+              + Adicionar
+            </button>
+          </div>
+        </div>
+
+        {/* Auto-publish toast */}
+        <AnimatePresence>
+          {lastResult && (
+            <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}}
+              className={cn("flex items-center gap-3 px-4 py-3 rounded-2xl mb-4 border text-sm",
+                lastResult.success
+                  ? "bg-success/8 border-success/20 text-success"
+                  : "bg-warning/8 border-warning/20 text-warning")}>
+              {lastResult.success
+                ? <CheckCircle2 className="w-4 h-4 flex-shrink-0"/>
+                : <AlertCircle  className="w-4 h-4 flex-shrink-0"/>}
+              <span className="flex-1 text-xs">{lastResult.msg}</span>
+              <button type="button" onClick={dismissResult} className="cursor-pointer hover:opacity-60 transition-opacity">
+                <XIcon className="w-3.5 h-3.5"/>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Week grid */}
+        <div className="grid grid-cols-7 gap-2">
+          {days.map(day => {
+            const dateStr   = toStr(day);
+            const dayEvents = events.filter(e => e.data === dateStr);
+            const isToday   = dateStr === todayStr;
+            return (
+              <div key={dateStr} className="flex flex-col gap-1.5">
+                <div className={cn("flex flex-col items-center py-2 rounded-xl", isToday?"gradient-primary":"bg-slate-50")}>
+                  <span className={cn("text-xs", isToday?"text-white/80":"text-text-light")}>{DAYS[day.getDay()]}</span>
+                  <span className={cn("text-sm font-bold", isToday?"text-white":"text-text-dark")}>{day.getDate()}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  {dayEvents.map(ev => {
+                    const isPublishing = publishing === ev.id;
+                    return (
+                      <motion.button key={ev.id} type="button" onClick={()=>openEdit(ev)}
+                        whileHover={{scale:1.03}}
+                        className={cn("p-2 rounded-xl border text-[10px] font-medium cursor-pointer text-left w-full relative overflow-hidden", typeColors[ev.tipo])}>
+                        {isPublishing && (
+                          <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
+                            <Loader2 className="w-3 h-3 animate-spin text-primary"/>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusDot[ev.status])}/>
+                          <span>{tipoOpts.find(t=>t.value===ev.tipo)?.label}</span>
+                          {ev.copy && <Sparkles className="w-2.5 h-2.5 ml-auto opacity-60"/>}
+                          {(ev.creatives?.length || ev.creative)
+                            ? <ImageIcon className="w-2.5 h-2.5 opacity-60"/>
+                            : ev.status === "agendado" && ev.scheduledAt
+                              ? <AlertCircle className="w-2.5 h-2.5 text-warning ml-auto"/>
+                              : null}
+                          {ev.scheduledAt && ev.status === "agendado" && (ev.creatives?.length || ev.creative) && <Clock className="w-2.5 h-2.5 opacity-70 text-success"/>}
+                        </div>
+                        <p className="line-clamp-2 leading-tight">{ev.titulo}</p>
+                        {ev.scheduledAt && (
+                          <p className="mt-0.5 opacity-60">{ev.scheduledAt.split("T")[1]}</p>
+                        )}
+                      </motion.button>
+                    );
+                  })}
+                  <button type="button" onClick={()=>openNew(dateStr)}
+                    className="h-8 rounded-xl border border-dashed border-slate-200 flex items-center justify-center hover:border-primary/40 hover:bg-primary/5 transition-colors cursor-pointer group">
+                    <span className="text-[10px] text-slate-300 group-hover:text-primary transition-colors">+</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-4 border-t border-slate-50">
+          {Object.entries(typeColors).map(([t,cls])=>(
+            <div key={t} className="flex items-center gap-1.5">
+              <div className={cn("w-2.5 h-2.5 rounded-md border",cls)}/>
+              <span className="text-xs text-text-light">{tipoOpts.find(o=>o.value===t)?.label}</span>
+            </div>
+          ))}
+          <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1">
+            {Object.entries(statusDot).map(([s,cls])=>(
+              <div key={s} className="flex items-center gap-1.5">
+                <div className={cn("w-2 h-2 rounded-full",cls)}/>
+                <span className="text-xs text-text-light">{statusOpts.find(o=>o.value===s)?.label}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-success"/>
+              <span className="text-xs text-text-light">Auto-post</span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Create / Edit Modal ─────────────────────────────────────────── */}
+      <Modal open={modalOpen} onClose={()=>setModalOpen(false)}
+        title={selected?"Editar Conteúdo":"Novo Conteúdo"}>
+        <div className="flex flex-col gap-4">
+
+          {/* Título */}
+          <div>
+            <label className="text-xs font-medium text-text-medium block mb-1.5">Título</label>
+            <input value={titulo} onChange={e=>setTitulo(e.target.value)}
+              placeholder="Ex: 5 erros na declaração do IR"
+              className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"/>
+          </div>
+
+          {/* Data + Tipo */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-text-medium block mb-1.5">Data</label>
+              <input type="date" value={data} onChange={e=>{
+                setData(e.target.value);
+                if (!scheduledAt) setScheduledAt(`${e.target.value}T18:00`);
+              }}
+                className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"/>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-text-medium block mb-1.5">Tipo</label>
+              <select value={tipo} onChange={e=>setTipo(e.target.value as CalendarEvent["tipo"])}
+                className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all bg-white cursor-pointer">
+                {tipoOpts.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Horário + Suggested times */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium text-text-medium flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-text-light"/>
+                Horário de publicação
+              </label>
+              <span className="text-[10px] text-text-light">Horários sugeridos →</span>
+            </div>
+            {/* Suggested time chips */}
+            <div className="flex gap-1.5 mb-2 flex-wrap">
+              {SUGGESTED_TIMES.map(t => {
+                const isActive = scheduledAt.endsWith(t.value);
+                return (
+                  <button key={t.value} type="button"
+                    onClick={() => setScheduledAt(`${data || todayStr}T${t.value}`)}
+                    className={cn("flex flex-col items-center px-2.5 py-1.5 rounded-xl border text-[10px] font-medium transition-all cursor-pointer",
+                      isActive
+                        ? "gradient-primary text-white border-transparent shadow-sm"
+                        : "border-slate-200 text-text-medium hover:border-primary/30 hover:bg-primary/5")}>
+                    <span className="font-bold">{t.label}</span>
+                    <span className={cn("leading-tight", isActive ? "text-white/70" : "text-text-light")}>{t.tip}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <input type="datetime-local" value={scheduledAt} onChange={e=>setScheduledAt(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"/>
+            <p className="text-[10px] text-text-light mt-1 flex items-center gap-1">
+              <Send className="w-3 h-3"/>
+              Quando status for &quot;Agendado&quot; e o horário chegar, o post será publicado automaticamente.
+            </p>
+          </div>
+
+          {/* Prompt IA */}
+          <div>
+            <label className="text-xs font-medium text-text-medium block mb-1.5 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-primary"/> Prompt para IA
+            </label>
+            <textarea value={prompt} onChange={e=>setPrompt(e.target.value)}
+              placeholder="Descreva: tema, tom, público-alvo, referências..."
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all resize-none placeholder:text-slate-300"/>
+          </div>
+
+          {/* Gerar IA */}
+          {prompt.trim() && titulo.trim() && (
+            <motion.button type="button" onClick={generateAI} disabled={aiLoading}
+              initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              {aiLoading
+                ? <><Loader2 className="w-4 h-4 animate-spin"/>Gerando conteúdo...</>
+                : <><Sparkles className="w-4 h-4"/>{hasAI?"Regenerar com IA":"Gerar com IA"}</>}
+            </motion.button>
+          )}
+
+          {aiError && (
+            <p className="text-xs text-danger bg-danger/5 border border-danger/20 rounded-xl px-3 py-2">{aiError}</p>
+          )}
+
+          {/* Resultado IA */}
+          {hasAI && (
+            <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}
+              className="border border-primary/20 rounded-2xl overflow-hidden bg-primary/3">
+              {aiResearched && (
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-success/8 border-b border-success/15">
+                  <Globe className="w-3 h-3 text-success flex-shrink-0"/>
+                  <span className="text-[10px] text-success font-medium">Pesquisa web realizada — dados atuais incorporados</span>
+                </div>
+              )}
+              <div className="flex border-b border-primary/15">
+                {([
+                  {id:"copy"     as AITab, label:"Roteiro",  icon:FileText },
+                  {id:"legenda"  as AITab, label:"Legenda",  icon:AlignLeft},
+                  {id:"hashtags" as AITab, label:"Hashtags", icon:Hash     },
+                ] as const).map(tab=>{
+                  const Icon=tab.icon;
+                  return (
+                    <button key={tab.id} type="button" onClick={()=>setActiveTab(tab.id)}
+                      className={cn("flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors cursor-pointer",
+                        activeTab===tab.id?"bg-primary/10 text-primary border-b-2 border-primary":"text-text-light hover:text-text-medium")}>
+                      <Icon className="w-3 h-3"/>{tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="p-3">
+                {activeTab==="copy" && (
+                  <div>
+                    <div className="flex justify-end mb-2"><CopyBtn text={aiCopy}/></div>
+                    <textarea value={aiCopy} onChange={e=>setAiCopy(e.target.value)} rows={8}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none bg-white"/>
+                  </div>
+                )}
+                {activeTab==="legenda" && (
+                  <div>
+                    <div className="flex justify-end mb-2"><CopyBtn text={aiLegenda}/></div>
+                    <textarea value={aiLegenda} onChange={e=>setAiLegenda(e.target.value)} rows={6}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none bg-white"/>
+                  </div>
+                )}
+                {activeTab==="hashtags" && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-text-light">{aiHashtags.length} hashtags</span>
+                      <CopyBtn text={aiHashtags.map(h=>`#${h}`).join(" ")}/>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {aiHashtags.map((tag,i)=>(
+                        <span key={i} className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium">#{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Status */}
+          <div>
+            <label className="text-xs font-medium text-text-medium block mb-1.5">Status</label>
+            <div className="grid grid-cols-2 gap-2">
+              {statusOpts.map(s=>(
+                <button key={s.value} type="button" onClick={()=>setStatus(s.value)}
+                  className={cn("py-2 rounded-xl text-xs font-medium border transition-all cursor-pointer text-center",
+                    status===s.value?"bg-primary/10 border-primary/30 text-primary":"border-slate-200 text-text-light hover:bg-slate-50")}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {status === "agendado" && scheduledAt && (
+              <div className="flex items-center gap-1.5 mt-2 px-3 py-2 rounded-xl bg-success/8 border border-success/20">
+                <Send className="w-3 h-3 text-success flex-shrink-0"/>
+                <span className="text-[10px] text-success">
+                  Será publicado automaticamente em {new Date(scheduledAt).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Criativos */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-text-medium flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5 text-text-light"/>
+                Criativos ({creatives.length}/10)
+              </label>
+              {creatives.length < 10 && (
+                <button type="button" onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-1 text-xs text-primary font-medium hover:opacity-70 transition-opacity cursor-pointer">
+                  <Upload className="w-3 h-3"/> Adicionar
+                </button>
+              )}
+            </div>
+
+            {creatives.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                {creatives.map((c, i) => (
+                  <div key={i} className="relative group/thumb" style={{ paddingBottom: "56.25%" }}>
+                    <div className="absolute inset-0 rounded-xl overflow-hidden border border-slate-200 bg-black">
+                      {c.dataUrl.startsWith("data:image") ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.dataUrl} alt={c.name}
+                          className="w-full h-full object-contain cursor-zoom-in"
+                          onClick={() => setLightbox(c.dataUrl)}/>
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-slate-900">
+                          <ImageIcon className="w-6 h-6 text-slate-500"/>
+                          <span className="text-[9px] text-slate-400 px-1 text-center leading-tight">{c.name}</span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/30 transition-colors flex items-center justify-center gap-1.5">
+                        {c.dataUrl.startsWith("data:image") && (
+                          <button type="button" onClick={() => setLightbox(c.dataUrl)}
+                            className="opacity-0 group-hover/thumb:opacity-100 transition-opacity w-7 h-7 rounded-lg bg-white/90 flex items-center justify-center cursor-pointer shadow text-text-dark hover:bg-white"
+                            title="Ver em tela cheia">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                            </svg>
+                          </button>
+                        )}
+                        <button type="button"
+                          onClick={() => setCreatives(prev => prev.filter((_, j) => j !== i))}
+                          className="opacity-0 group-hover/thumb:opacity-100 transition-opacity w-7 h-7 rounded-lg bg-white/90 flex items-center justify-center cursor-pointer shadow hover:bg-white"
+                          title="Remover">
+                          <XIcon className="w-3.5 h-3.5 text-danger"/>
+                        </button>
+                      </div>
+                      <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-md bg-black/60 flex items-center justify-center">
+                        <span className="text-[10px] text-white font-bold">{i+1}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {creatives.length < 10 && (
+                  <div className="relative" style={{ paddingBottom: "56.25%" }}>
+                    <button type="button" onClick={() => fileRef.current?.click()}
+                      className="absolute inset-0 rounded-xl border-2 border-dashed border-slate-200 hover:border-primary/40 hover:bg-primary/3 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group/add">
+                      <Upload className="w-5 h-5 text-slate-300 group-hover/add:text-primary transition-colors"/>
+                      <span className="text-[10px] text-slate-300 group-hover/add:text-primary transition-colors">Adicionar</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {creatives.length === 0 && (
+              <button type="button" onClick={() => fileRef.current?.click()}
+                className="w-full rounded-2xl border-2 border-dashed border-slate-200 hover:border-primary/40 hover:bg-primary/3 transition-all flex flex-col items-center justify-center gap-2 cursor-pointer group/empty"
+                style={{ paddingBlock: "1.5rem" }}>
+                <Upload className="w-7 h-7 text-slate-300 group-hover/empty:text-primary transition-colors"/>
+                <span className="text-xs text-slate-400 group-hover/empty:text-primary transition-colors font-medium">
+                  Subir criativos (até 10)
+                </span>
+                <span className="text-[10px] text-slate-300">JPG · PNG · MP4 · MOV · 16:9 recomendado</span>
+              </button>
+            )}
+
+            <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFileChange}/>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            {selected && (
+              <button type="button" onClick={remove}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-danger/30 text-danger hover:bg-danger/5 transition-all cursor-pointer">
+                Excluir
+              </button>
+            )}
+            <button type="button" onClick={()=>setModalOpen(false)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-slate-200 text-text-medium hover:bg-slate-50 transition-all cursor-pointer">
+              Cancelar
+            </button>
+            <button type="button" onClick={save} disabled={!titulo.trim()}
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+              {selected?"Salvar":"Criar"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Lightbox */}
+      <AnimatePresence>
+        {lightbox && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+            onClick={() => setLightbox(null)}>
+            <motion.div
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              transition={{ type: "spring", duration: 0.3, bounce: 0.1 }}
+              className="relative max-w-5xl w-full"
+              onClick={e => e.stopPropagation()}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={lightbox} alt="criativo" className="w-full rounded-2xl object-contain max-h-[85vh]"/>
+              <button type="button" onClick={() => setLightbox(null)}
+                className="absolute top-3 right-3 w-9 h-9 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-colors">
+                <XIcon className="w-5 h-5 text-white"/>
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}

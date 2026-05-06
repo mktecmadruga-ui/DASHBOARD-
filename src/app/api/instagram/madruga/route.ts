@@ -1,0 +1,20 @@
+import { fetchProfile, fetchMedia } from "@/lib/instagram-api";
+
+// Revalidate every 2 days (172800 seconds)
+export const revalidate = 172800;
+
+export async function GET() {
+  const [profile, media] = await Promise.all([
+    fetchProfile("madruga"),
+    fetchMedia("madruga", 20),
+  ]);
+
+  if (!profile) {
+    return Response.json({ error: "Erro ao buscar dados do @madrugacontabilidade" }, { status: 500 });
+  }
+
+  return Response.json(
+    { profile, media, cachedAt: new Date().toISOString() },
+    { headers: { "Cache-Control": "s-maxage=172800, stale-while-revalidate=86400" } }
+  );
+}
