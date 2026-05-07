@@ -64,9 +64,11 @@ export async function GET() {
   }
 
   const newExpiry = new Date(Date.now() + renewed.expires_in * 1000);
+  const newDaysLeft = Math.floor(renewed.expires_in / 86400);
 
   return Response.json({
     status: "renewed",
+    daysLeft: newDaysLeft,
     access_token: renewed.access_token,
     expires_in_days: Math.floor(renewed.expires_in / 86400),
     expires_at: newExpiry.toISOString(),

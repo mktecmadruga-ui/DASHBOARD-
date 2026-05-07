@@ -17,14 +17,16 @@ import type { CalendarEvent } from "@/types";
 // ─── Per-profile storage keys ─────────────────────────────────────────────────
 const storageKey = (slug: string) => `calendar_events_v3_${slug}`;
 
-// ─── Suggested posting times (from real engagement analysis) ─────────────────
-const SUGGESTED_TIMES = [
+// ─── Fallback suggested times ─────────────────────────────────────────────────
+const FALLBACK_TIMES = [
   { label: "08h",  value: "08:00", tip: "Pico matinal"      },
   { label: "12h",  value: "12:00", tip: "Almoço"            },
   { label: "18h",  value: "18:00", tip: "⭐ Melhor horário"  },
   { label: "20h",  value: "20:00", tip: "Noite — alto eng." },
   { label: "21h",  value: "21:00", tip: "Pico noturno"      },
 ];
+
+type BestTime = { label: string; value: string; tip: string; avg?: number };
 
 const defaultEventsWilliam: CalendarEvent[] = [
   { id: "w1", titulo: "Split Payment Pix — impacto no CNPJ", data: "2026-05-06", tipo: "reel",      status: "agendado",  scheduledAt: "2026-05-06T18:00" },
@@ -79,24 +81,74 @@ function getMonday(d: Date) {
   m.setDate(d.getDate()+diff); m.setHours(0,0,0,0); return m;
 }
 
-// ─── Persistent events hook (per-profile) ────────────────────────────────────
+// ─── Persistent events hook (Supabase with localStorage fallback) ─────────────
 function usePersistedEvents(slug: string) {
   const defaults = slug === "william" ? defaultEventsWilliam : defaultEventsMadruga;
   const [events, setEventsRaw] = useState<CalendarEvent[]>(defaults);
+  const [supEnabled, setSupEnabled] = useState<boolean | null>(null); // null = checking
 
+  // Load: try Supabase first, fall back to localStorage
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(storageKey(slug));
-      if (stored) setEventsRaw(JSON.parse(stored) as CalendarEvent[]);
-      else        setEventsRaw(defaults);
-    } catch {}
+    let cancelled = false;
+    async function load() {
+      // Try API (Supabase-backed)
+      try {
+        const res  = await fetch(`/api/calendar?slug=${slug}`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.configured === false) {
+          // Supabase not set up — use localStorage
+          setSupEnabled(false);
+          const stored = localStorage.getItem(storageKey(slug));
+          setEventsRaw(stored ? JSON.parse(stored) as CalendarEvent[] : defaults);
+        } else if (json.events) {
+          setSupEnabled(true);
+          const mapped: CalendarEvent[] = (json.events as Array<Record<string,unknown>>).map(r => ({
+            id:          r.id as string,
+            titulo:      r.titulo as string,
+            data:        r.data as string,
+            tipo:        r.tipo as CalendarEvent["tipo"],
+            status:      r.status as CalendarEvent["status"],
+            scheduledAt: (r.scheduled_at as string | null) ?? undefined,
+            legenda:     (r.legenda as string | null) ?? undefined,
+          }));
+          setEventsRaw(mapped.length ? mapped : defaults);
+        }
+      } catch {
+        if (cancelled) return;
+        setSupEnabled(false);
+        const stored = localStorage.getItem(storageKey(slug));
+        setEventsRaw(stored ? JSON.parse(stored) as CalendarEvent[] : defaults);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   function setEvents(updater: CalendarEvent[] | ((prev: CalendarEvent[]) => CalendarEvent[])) {
     setEventsRaw(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
+      // Always keep localStorage in sync as a safety net
       try { localStorage.setItem(storageKey(slug), JSON.stringify(next)); } catch {}
+      // If Supabase is enabled, sync changed/added events
+      if (supEnabled) {
+        const changed = next.filter(e => {
+          const old = prev.find(p => p.id === e.id);
+          return !old || JSON.stringify(old) !== JSON.stringify(e);
+        });
+        const deleted = prev.filter(e => !next.find(n => n.id === e.id));
+        for (const ev of changed) {
+          fetch("/api/calendar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...ev, slug }),
+          }).catch(console.error);
+        }
+        for (const ev of deleted) {
+          fetch(`/api/calendar?id=${ev.id}`, { method: "DELETE" }).catch(console.error);
+        }
+      }
       return next;
     });
   }
@@ -208,6 +260,18 @@ export default function ContentCalendar() {
 
   const [events, setEvents] = usePersistedEvents(slug);
   const { publishing, lastResult, dismissResult } = useAutoPublisher(events, setEvents, slug);
+
+  // Best times to post — computed from real media history
+  const [bestTimes, setBestTimes] = useState<BestTime[]>(FALLBACK_TIMES);
+  useEffect(() => {
+    setBestTimes(FALLBACK_TIMES); // reset on account switch
+    fetch(`/api/instagram/${slug}/best-times`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.bestTimes?.length) setBestTimes(d.bestTimes);
+      })
+      .catch(() => {/* keep fallback */});
+  }, [slug]);
 
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [modalOpen, setModalOpen] = useState(false);
@@ -491,11 +555,11 @@ export default function ContentCalendar() {
                 <Clock className="w-3.5 h-3.5 text-text-light"/>
                 Horário de publicação
               </label>
-              <span className="text-[10px] text-text-light">Horários sugeridos →</span>
+              <span className="text-[10px] text-text-light">Melhores horários (histórico real) →</span>
             </div>
-            {/* Suggested time chips */}
+            {/* Best-time chips — computed from real media engagement */}
             <div className="flex gap-1.5 mb-2 flex-wrap">
-              {SUGGESTED_TIMES.map(t => {
+              {bestTimes.map(t => {
                 const isActive = scheduledAt.endsWith(t.value);
                 return (
                   <button key={t.value} type="button"
@@ -505,7 +569,9 @@ export default function ContentCalendar() {
                         ? "gradient-primary text-white border-transparent shadow-sm"
                         : "border-slate-200 text-text-medium hover:border-primary/30 hover:bg-primary/5")}>
                     <span className="font-bold">{t.label}</span>
-                    <span className={cn("leading-tight", isActive ? "text-white/70" : "text-text-light")}>{t.tip}</span>
+                    <span className={cn("leading-tight", isActive ? "text-white/70" : "text-text-light")}>
+                      {t.tip}
+                    </span>
                   </button>
                 );
               })}
