@@ -67,7 +67,7 @@ Reels: ${reels.length} posts (média ${avg(reels)} interações) | Carrosséis: 
 Top posts: ${topPosts.slice(0, 3).map(p => `${p.like_count}❤ ${p.comments_count}💬`).join(" / ")}
 Audiência: ${genderPct.map(g => `${g.label} ${g.pct}%`).join(", ")} | Top cidades: ${cities.slice(0, 3).map(c => c.name).join(", ") || "n/d"}`;
 
-  let narrative = {
+  const narrative = {
     resumo: `@${profile.username} registrou ${fmt(totals?.likes ?? 0)} curtidas e ${fmt(totals?.comments ?? 0)} comentários nos últimos ${days} dias, com taxa de engajamento de ${engRate}% sobre ${fmt(profile.followers_count)} seguidores.`,
     destaques: [
       `${reels.length} Reels publicados com média de ${fmt(avg(reels))} interações por post`,
@@ -112,11 +112,6 @@ Audiência: ${genderPct.map(g => `${g.label} ${g.pct}%`).join(", ")} | Top cidad
   const date    = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
   const initial = profile.username.charAt(0).toUpperCase();
   const maxAvg  = Math.max(avg(reels), avg(carros), avg(images), 1);
-
-  function bar(val: number, max: number, color: string) {
-    const w = Math.max(Math.round(val / max * 100), val > 0 ? 4 : 0);
-    return `<div style="background:#E2E8F0;border-radius:4px;height:8px;"><div style="background:${color};border-radius:4px;height:8px;width:${w}%;"></div></div>`;
-  }
 
   function postType(t: string) {
     return t === "VIDEO" ? "Reel" : t === "CAROUSEL_ALBUM" ? "Carrossel" : "Foto";
