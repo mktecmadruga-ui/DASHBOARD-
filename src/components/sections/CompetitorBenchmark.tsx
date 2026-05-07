@@ -202,49 +202,65 @@ export default function CompetitorBenchmark() {
         <h3 className="text-lg font-semibold text-text-dark mb-1">Benchmark</h3>
         <p className="text-sm text-text-light mb-4">Clique para análise detalhada</p>
 
+        {/* Minha conta */}
         <div className="p-3 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full gradient-primary flex items-center justify-center text-xs font-bold text-white">
-                {account.usuario.charAt(1).toUpperCase()}
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-primary">{account.usuario}</p>
-                <span className="text-[10px] text-primary/70">Você</span>
-              </div>
+          <div className="flex items-center gap-2 mb-2.5">
+            <div className="w-7 h-7 rounded-full gradient-primary flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+              {account.usuario.charAt(1).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-primary truncate">{account.usuario}</p>
+              <span className="text-[10px] text-primary/70">Você</span>
             </div>
             <Badge value={3.2} />
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div><p className="text-xs font-semibold text-text-dark">{formatNumber(mySeguidores)}</p><p className="text-[10px] text-text-light">Seguidores</p></div>
-            <div><p className="text-xs font-semibold text-text-dark">{typeof myEngajamento === "number" ? myEngajamento.toFixed(1) : myEngajamento}%</p><p className="text-[10px] text-text-light">Engajamento</p></div>
-            <div><p className="text-xs font-semibold text-text-dark">{account.id === "william" ? "5x/sem" : "3x/sem"}</p><p className="text-[10px] text-text-light">Frequência</p></div>
+          <div className="grid grid-cols-3 gap-1.5 text-center">
+            <div className="bg-white/60 rounded-xl p-1.5">
+              <p className="text-xs font-bold text-text-dark">{formatNumber(mySeguidores)}</p>
+              <p className="text-[10px] text-text-light leading-tight">Seguidores</p>
+            </div>
+            <div className="bg-white/60 rounded-xl p-1.5">
+              <p className="text-xs font-bold text-text-dark">{typeof myEngajamento === "number" ? myEngajamento.toFixed(1) : myEngajamento}%</p>
+              <p className="text-[10px] text-text-light leading-tight">Engaj.</p>
+            </div>
+            <div className="bg-white/60 rounded-xl p-1.5">
+              <p className="text-xs font-bold text-text-dark">{account.id === "william" ? "5x/sem" : "3x/sem"}</p>
+              <p className="text-[10px] text-text-light leading-tight">Freq.</p>
+            </div>
           </div>
         </div>
 
+        {/* Concorrentes */}
         <div className="flex flex-col gap-2">
           {competitors.map((comp) => (
             <button key={comp.usuario} type="button" onClick={() => setSelected(comp)}
               className="w-full text-left p-3 rounded-2xl bg-slate-50/80 hover:bg-slate-100 hover:shadow-sm transition-all cursor-pointer group">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-slate-300 flex items-center justify-center text-xs font-bold text-slate-600">
-                    {comp.usuario.charAt(1).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-text-dark group-hover:text-primary transition-colors">{comp.usuario}</p>
-                    <p className="text-[10px] text-text-light">{comp.nicho}</p>
-                  </div>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-full bg-slate-300 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">
+                  {comp.usuario.charAt(1).toUpperCase()}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-text-dark group-hover:text-primary transition-colors truncate">{comp.usuario}</p>
+                  <p className="text-[10px] text-text-light truncate">{comp.nicho}</p>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <Badge value={comp.crescimento} />
                   <Layers className="w-3 h-3 text-slate-300 group-hover:text-primary transition-colors" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div><p className="text-xs font-semibold text-text-dark">{formatNumber(comp.seguidores)}</p><p className="text-[10px] text-text-light">Seguidores</p></div>
-                <div><p className="text-xs font-semibold text-text-dark">{comp.engajamento}%</p><p className="text-[10px] text-text-light">Engajamento</p></div>
-                <div><p className="text-xs font-semibold text-text-dark">{comp.frequencia}x/sem</p><p className="text-[10px] text-text-light">Frequência</p></div>
+              <div className="grid grid-cols-3 gap-1.5 text-center">
+                <div className="bg-white rounded-xl p-1.5">
+                  <p className="text-xs font-semibold text-text-dark">{formatNumber(comp.seguidores)}</p>
+                  <p className="text-[10px] text-text-light leading-tight">Seguidores</p>
+                </div>
+                <div className="bg-white rounded-xl p-1.5">
+                  <p className="text-xs font-semibold text-text-dark">{comp.engajamento}%</p>
+                  <p className="text-[10px] text-text-light leading-tight">Engaj.</p>
+                </div>
+                <div className="bg-white rounded-xl p-1.5">
+                  <p className="text-xs font-semibold text-text-dark">{comp.frequencia}x/sem</p>
+                  <p className="text-[10px] text-text-light leading-tight">Freq.</p>
+                </div>
               </div>
             </button>
           ))}

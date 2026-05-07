@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import Card from "@/components/ui/Card";
 import { useAccount } from "@/context/AccountContext";
 import { formatNumber } from "@/lib/utils";
-import { Heart, MessageCircle, Play, Image, Layers, Loader2, ExternalLink, X, TrendingUp, TrendingDown, Award } from "lucide-react";
-import type { InstagramMedia } from "@/lib/instagram-api";
+import { Heart, MessageCircle, Play, Image, Layers, Loader2, ExternalLink, X, TrendingUp, TrendingDown, Award, Eye, Bookmark, Share2 } from "lucide-react";
+import type { InstagramMedia, MediaInsights } from "@/lib/instagram-api";
 
 const mediaTypeIcon = { VIDEO: Play, IMAGE: Image, CAROUSEL_ALBUM: Layers };
 const mediaTypeLabel = { VIDEO: "Reel", IMAGE: "Foto", CAROUSEL_ALBUM: "Carrossel" };
@@ -64,8 +64,9 @@ function analyzePost(post: InstagramMedia, avgLikes: number, avgComments: number
   return { ratio, engagement, reasons: reasons.slice(0, 3), suggestions: suggestions.slice(0, 3) };
 }
 
-function PostDetailModal({ post, rank, avgLikes, avgComments, followers, onClose }: {
-  post: InstagramMedia; rank: number; avgLikes: number; avgComments: number; followers: number; onClose: () => void;
+function PostDetailModal({ post, rank, avgLikes, avgComments, followers, insights, onClose }: {
+  post: InstagramMedia; rank: number; avgLikes: number; avgComments: number; followers: number;
+  insights: MediaInsights | null; onClose: () => void;
 }) {
   const Icon = mediaTypeIcon[post.media_type] ?? Play;
   const analysis = analyzePost(post, avgLikes, avgComments, followers);
@@ -124,6 +125,27 @@ function PostDetailModal({ post, rank, avgLikes, avgComments, followers, onClose
                 <p className="text-[10px] text-text-light">Engajamento</p>
               </div>
             </div>
+
+            {/* Real insights if available */}
+            {insights && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-2xl bg-primary/5 border border-primary/10 text-center">
+                  <Eye className="w-4 h-4 text-primary mx-auto mb-1" />
+                  <p className="text-lg font-bold text-text-dark">{formatNumber(insights.reach)}</p>
+                  <p className="text-[10px] text-text-light">Alcance</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-success/5 border border-success/10 text-center">
+                  <Bookmark className="w-4 h-4 text-success mx-auto mb-1" />
+                  <p className="text-lg font-bold text-text-dark">{formatNumber(insights.saved)}</p>
+                  <p className="text-[10px] text-text-light">Salvamentos</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-warning/5 border border-warning/10 text-center">
+                  <Share2 className="w-4 h-4 text-warning mx-auto mb-1" />
+                  <p className="text-lg font-bold text-text-dark">{formatNumber(insights.shares)}</p>
+                  <p className="text-[10px] text-text-light">Compartilhamentos</p>
+                </div>
+              </div>
+            )}
 
             {/* Performance vs média */}
             <div className={`p-4 rounded-2xl ${isGood ? "bg-success/5 border border-success/15" : "bg-warning/5 border border-warning/15"}`}>
@@ -193,20 +215,43 @@ export default function TopContent() {
   const { account } = useAccount();
   const slug = account.id === "william" ? "william" : "madruga";
   const [media, setMedia] = useState<InstagramMedia[]>([]);
+  const [insightsMap, setInsightsMap] = useState<Record<string, MediaInsights>>({});
   const [loading, setLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<{ post: InstagramMedia; rank: number } | null>(null);
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     setLoading(true);
+    setMedia([]);
+    setInsightsMap({});
     fetch(`/api/instagram/${slug}`)
       .then((r) => r.json())
-      .then((data) => {
+      .then(async (data) => {
         if (data.media) {
           const sorted = [...data.media].sort(
             (a, b) => (b.like_count + b.comments_count) - (a.like_count + a.comments_count)
           );
           setMedia(sorted);
+
+          // Fetch per-post insights for top 6 posts
+          const top6 = sorted.slice(0, 6);
+          const results = await Promise.allSettled(
+            top6.map(p => fetch(`/api/instagram/${slug}/post/${p.id}`).then(r => r.json()))
+          );
+          const map: Record<string, MediaInsights> = {};
+          results.forEach((r, i) => {
+            if (r.status === "fulfilled" && r.value?.reach !== undefined) {
+              map[top6[i].id] = r.value as MediaInsights;
+            }
+          });
+          setInsightsMap(map);
+          // Re-sort by saves if we got insights
+          const hasSaves = Object.values(map).some(ins => ins.saved > 0);
+          if (hasSaves) {
+            const withSaves = sorted.map(p => ({ p, saved: map[p.id]?.saved ?? 0 }));
+            withSaves.sort((a, b) => b.saved - a.saved);
+            setMedia(withSaves.map(w => w.p));
+          }
         }
       })
       .catch(console.error)
@@ -344,6 +389,7 @@ export default function TopContent() {
           avgLikes={avgLikes}
           avgComments={avgComments}
           followers={followers}
+          insights={insightsMap[selectedPost.post.id] ?? null}
           onClose={() => setSelectedPost(null)}
         />
       )}

@@ -11,6 +11,7 @@ import RetentionAnalytics from "@/components/sections/RetentionAnalytics";
 import ConversionFunnel from "@/components/sections/ConversionFunnel";
 import ContentCalendar from "@/components/sections/ContentCalendar";
 import CompetitorBenchmark from "@/components/sections/CompetitorBenchmark";
+import CompetitorTopContent from "@/components/sections/CompetitorTopContent";
 
 export default function Home() {
   return (
@@ -60,12 +61,18 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid grid-cols-12 gap-6 pb-6">
+        <div className="grid grid-cols-12 gap-6">
           <div id="sec-calendar" className="col-span-8 scroll-mt-6">
             <ContentCalendar />
           </div>
           <div id="sec-benchmark" className="col-span-4 scroll-mt-6">
             <CompetitorBenchmark />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-12 gap-6 pb-6">
+          <div id="sec-competitor-content" className="col-span-12 scroll-mt-6">
+            <CompetitorTopContent />
           </div>
         </div>
 
