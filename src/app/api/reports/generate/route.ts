@@ -118,7 +118,10 @@ Retorne APENAS JSON válido:
       const data = await res.json();
       const text = data.content?.[0]?.text ?? "{}";
       const parsed = JSON.parse(text.replace(/```json\n?|\n?```/g, "").trim());
-      narrative = { ...narrative, ...parsed };
+      if (parsed.resumo)                narrative.resumo        = parsed.resumo;
+      if (parsed.destaques?.length)     narrative.destaques     = parsed.destaques;
+      if (parsed.oportunidades?.length) narrative.oportunidades = parsed.oportunidades;
+      if (parsed.recomendacoes?.length) narrative.recomendacoes = parsed.recomendacoes;
     } catch (e) {
       console.error("[reports/generate] Claude error:", e);
       // Fallback narrative
