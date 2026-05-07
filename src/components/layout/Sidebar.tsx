@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   LayoutDashboard, BarChart3, TrendingUp, Users, Heart,
   Zap, Filter, Sparkles, Calendar, Target, Settings, Activity,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AccountSwitcher from "@/components/ui/AccountSwitcher";
@@ -80,6 +82,18 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Leads link — separado */}
+      <div className="px-4 pb-2">
+        <Link
+          href="/leads"
+          className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all duration-150 w-full"
+        >
+          <UserCheck className="w-4 h-4 flex-shrink-0" />
+          <span>Leads</span>
+          <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded-md font-semibold">NEW</span>
+        </Link>
+      </div>
 
       {/* Profile — dinâmico */}
       <div className="px-4 pt-4 border-t border-white/10">
