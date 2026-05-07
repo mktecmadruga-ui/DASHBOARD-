@@ -77,8 +77,10 @@ export default function LineChartPremium({
             dataKey={s.dataKey}
             stroke={s.color}
             strokeWidth={2.5}
-            dot={false}
+            dot={{ r: 2, fill: s.color, strokeWidth: 0 }}
             activeDot={{ r: 5, strokeWidth: 2, stroke: s.color, fill: "#fff" }}
+            connectNulls
+            isAnimationActive={false}
             name={s.name}
           />
         ))}
