@@ -5,14 +5,14 @@
  */
 import { NextRequest } from "next/server";
 
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const MODEL      = "gpt-4o-mini";
+const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
+const MODEL      = "claude-sonnet-4-5";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return Response.json({ error: "OPENAI_API_KEY não configurado" }, { status: 500 });
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return Response.json({ error: "ANTHROPIC_API_KEY não configurado" }, { status: 500 });
 
   const { slug, media = [], totals = {}, followers = 1, bestHours = [] } = await req.json();
 
@@ -93,24 +93,25 @@ Retorne APENAS JSON válido (sem markdown, sem explicação) no formato:
 Insights devem cobrir: melhor formato, melhor horário, tema de conteúdo que mais performa, e frequência/consistência.`;
 
   try {
-    const res = await fetch(OPENAI_URL, {
+    const res = await fetch(CLAUDE_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+      },
       body: JSON.stringify({
         model: MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user",   content: userPrompt },
-        ],
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
         temperature: 0.4,
-        max_tokens: 1800,
-        response_format: { type: "json_object" },
+        max_tokens: 2000,
       }),
     });
 
     const data = await res.json();
-    const text = data.choices?.[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(text);
+    const text = data.content?.[0]?.text ?? "{}";
+    const parsed = JSON.parse(text.replace(/```json\n?|\n?```/g, "").trim());
     return Response.json({ insights: parsed.insights ?? [] });
   } catch (e) {
     console.error("[ai/insights]", e);

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const MODEL      = "gpt-4o-mini";
+const CLAUDE_URL = "https://api.anthropic.com/v1/messages";
+const MODEL      = "claude-sonnet-4-5";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DIRETRIZES BASEADAS NA ANÁLISE DOS CONTEÚDOS REAIS
@@ -247,9 +247,9 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Campos obrigatórios: titulo, tipo, prompt" }, { status: 400 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return Response.json({ error: "OPENAI_API_KEY não configurada" }, { status: 500 });
+    return Response.json({ error: "ANTHROPIC_API_KEY não configurada" }, { status: 500 });
   }
 
   const formatSpec = FORMAT_SPECS[tipo] ?? FORMAT_SPECS.feed;
@@ -290,32 +290,30 @@ ${userPrompt}
 INSTRUÇÃO ESPECIAL: Use dados, números e contexto do mercado brasileiro atual para enriquecer o conteúdo. Aplique a fórmula de hook viral mais adequada para este tema. O conteúdo deve soar como William falando — posicionado, direto, sem rodeios.`;
 
   try {
-    const res = await fetch(OPENAI_URL, {
+    const res = await fetch(CLAUDE_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
         model: MODEL,
-        messages: [
-          { role: "system", content: systemMessage },
-          { role: "user",   content: userMessage   },
-        ],
+        system: systemMessage,
+        messages: [{ role: "user", content: userMessage }],
         temperature: 0.85,
         max_tokens:  4000,
-        response_format: { type: "json_object" },
       }),
     });
 
     if (!res.ok) {
       const err = await res.text();
-      console.error("OpenAI error:", err);
-      return Response.json({ error: "Erro na API do OpenAI" }, { status: 502 });
+      console.error("Claude error:", err);
+      return Response.json({ error: "Erro na API do Claude" }, { status: 502 });
     }
 
     const data    = await res.json();
-    const rawText = data.choices?.[0]?.message?.content ?? "";
+    const rawText = data.content?.[0]?.text ?? "";
 
     let parsed: { copy: string; legenda: string; hashtags: string[] };
     try {
