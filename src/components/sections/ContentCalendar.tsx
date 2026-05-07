@@ -277,6 +277,32 @@ export default function ContentCalendar() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected]   = useState<CalendarEvent | null>(null);
 
+  // Deeplink: open event from URL (?event=ID) — used by Telegram links
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const eventId = params.get("event");
+    if (!eventId || events.length === 0 || modalOpen) return;
+    const ev = events.find(e => e.id === eventId);
+    if (ev) {
+      setTimeout(() => {
+        setSelected(ev); setTitulo(ev.titulo); setData(ev.data);
+        setScheduledAt(ev.scheduledAt ?? "");
+        setTipo(ev.tipo); setStatus(ev.status); setPrompt(ev.prompt ?? "");
+        setAiCopy(ev.copy ?? ""); setAiLegenda(ev.legenda ?? "");
+        setAiHashtags(ev.hashtags ?? []); setAiError(""); setActiveTab("copy");
+        setAiResearched(false);
+        const saved = ev.creatives ?? (ev.creative ? [{ dataUrl: ev.creative, name: ev.creativeName ?? "criativo" }] : []);
+        setCreatives(saved);
+        setModalOpen(true);
+        // Scroll to calendar section
+        document.getElementById("sec-calendar")?.scrollIntoView({ behavior: "smooth" });
+        // Clean URL
+        window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+      }, 200);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
+
   // form fields
   const [titulo, setTitulo]           = useState("");
   const [data,   setData]             = useState(toStr(new Date()));
