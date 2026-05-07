@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Search, Bell, Download, Sparkles, ChevronDown, Check, AlertTriangle, RefreshCw, X } from "lucide-react";
+import { Search, Bell, Download, Sparkles, ChevronDown, Check, AlertTriangle, RefreshCw, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePeriod, PERIODS } from "@/context/PeriodContext";
 import { useAccount } from "@/context/AccountContext";
@@ -52,7 +52,8 @@ export default function Header() {
   const [dropdown, setDropdown] = useState(false);
   const [search, setSearch]     = useState("");
   const [token, setToken]       = useState<TokenStatus>({ status: "checking", daysLeft: 99 });
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed]   = useState(false);
+  const [exporting, setExporting]   = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -63,6 +64,31 @@ export default function Header() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const main = document.getElementById("dashboard-main");
+      if (!main) return;
+      const canvas = await html2canvas(main, {
+        scale: 1.5,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#F5F7FB",
+        logging: false,
+      });
+      const pdf    = new jsPDF({ orientation: "landscape", unit: "px", format: [canvas.width, canvas.height] });
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.85), "JPEG", 0, 0, canvas.width, canvas.height);
+      const date   = new Date().toLocaleDateString("pt-BR").replace(/\//g, "-");
+      pdf.save(`dashboard-${slug}-${date}.pdf`);
+    } catch (e) { console.error(e); }
+    finally { setExporting(false); }
+  }
 
   // Check token expiry once per session
   useEffect(() => {
@@ -139,10 +165,14 @@ export default function Header() {
 
         <button
           type="button"
-          title="Exportar relatório"
-          className="w-11 h-11 rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-card hover:shadow-glass hover:border-slate-200 transition-all cursor-pointer"
+          title="Exportar PDF"
+          onClick={handleExport}
+          disabled={exporting}
+          className="w-11 h-11 rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-card hover:shadow-glass hover:border-slate-200 transition-all cursor-pointer disabled:opacity-50"
         >
-          <Download className="w-4 h-4 text-text-medium" />
+          {exporting
+            ? <Loader2 className="w-4 h-4 text-primary animate-spin" />
+            : <Download className="w-4 h-4 text-text-medium" />}
         </button>
 
         <button

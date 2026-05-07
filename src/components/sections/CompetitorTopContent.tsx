@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Card from "@/components/ui/Card";
-import { Heart, MessageCircle, Play, Image, Layers, ExternalLink, Loader2, RefreshCw, TrendingUp } from "lucide-react";
+import { Heart, MessageCircle, Play, Image, Layers, ExternalLink, Loader2, RefreshCw, TrendingUp, Settings, X, Plus, Trash2 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { useAccount } from "@/context/AccountContext";
 import type { CompetitorData, CompetitorPost } from "@/lib/apify";
@@ -150,14 +150,103 @@ function CompetitorColumn({ data, index }: { data: CompetitorData; index: number
   );
 }
 
+import { COMPETITORS_BY_ACCOUNT } from "@/lib/apify";
+
+const storageKey = (slug: string) => `competitor_usernames_v1_${slug}`;
+
+function useCompetitorList(slug: string) {
+  const defaults = COMPETITORS_BY_ACCOUNT[slug] ?? COMPETITORS_BY_ACCOUNT.william;
+  const [list, setListRaw] = useState<string[]>(defaults);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey(slug));
+      setListRaw(stored ? JSON.parse(stored) : defaults);
+    } catch { setListRaw(defaults); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  function setList(next: string[]) {
+    setListRaw(next);
+    try { localStorage.setItem(storageKey(slug), JSON.stringify(next)); } catch {}
+  }
+
+  return [list, setList] as const;
+}
+
+function ConfigModal({ slug, list, onSave, onClose }: {
+  slug: string; list: string[]; onSave: (next: string[]) => void; onClose: () => void;
+}) {
+  const [draft, setDraft]   = useState<string[]>(list);
+  const [input, setInput]   = useState("");
+
+  function add() {
+    const username = input.trim().replace(/^@/, "").toLowerCase();
+    if (username && !draft.includes(username)) setDraft(d => [...d, username]);
+    setInput("");
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 z-10">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-base font-semibold text-text-dark">Concorrentes monitorados</h3>
+            <p className="text-xs text-text-light mt-0.5">perfil: @{slug === "william" ? "williamnmadruga" : "madrugacontabilidade"}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors cursor-pointer">
+            <X className="w-4 h-4 text-text-medium" />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-2 mb-4">
+          {draft.map(u => (
+            <div key={u} className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="text-sm text-text-dark">@{u}</span>
+              <button onClick={() => setDraft(d => d.filter(x => x !== u))} className="text-slate-400 hover:text-danger transition-colors cursor-pointer">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 mb-5">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && add()}
+            placeholder="@username do Instagram"
+            className="flex-1 h-9 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30"
+          />
+          <button onClick={add} className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0 cursor-pointer hover:opacity-90">
+            <Plus className="w-4 h-4 text-white" />
+          </button>
+        </div>
+
+        <p className="text-[10px] text-text-light mb-4">Máx. 6 perfis. Apenas contas públicas com posts recentes serão carregadas pelo Apify.</p>
+
+        <button
+          onClick={() => { onSave(draft.slice(0, 6)); onClose(); }}
+          className="w-full h-10 rounded-2xl gradient-primary text-white text-sm font-medium hover:opacity-90 transition-opacity cursor-pointer"
+        >
+          Salvar e atualizar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function CompetitorTopContent() {
   const { account } = useAccount();
   const slug = account.id === "william" ? "william" : "madruga";
 
+  const [customList, setCustomList] = useCompetitorList(slug);
   const [competitors, setCompetitors] = useState<CompetitorData[]>([]);
   const [loading, setLoading]         = useState(true);
   const [fetchedAt, setFetchedAt]     = useState<string | null>(null);
   const [refreshing, setRefreshing]   = useState(false);
+  const [configOpen, setConfigOpen]   = useState(false);
 
   const load = (accountSlug: string) => {
     setLoading(true);
@@ -174,10 +263,15 @@ export default function CompetitorTopContent() {
 
   useEffect(() => { load(slug); }, [slug]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (usernames?: string[]) => {
     setRefreshing(true);
     try {
-      await fetch(`/api/competitors/refresh?account=${slug}`, { method: "POST" });
+      const toFetch = usernames ?? customList;
+      await fetch(`/api/competitors/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usernames: toFetch }),
+      });
       await new Promise((r) => setTimeout(r, 15000));
       load(slug);
     } finally {
@@ -185,9 +279,15 @@ export default function CompetitorTopContent() {
     }
   };
 
+  function handleSaveConfig(next: string[]) {
+    setCustomList(next);
+    handleRefresh(next);
+  }
+
   const hasData = competitors.some((c) => c.posts.length > 0);
 
   return (
+    <>
     <Card className="col-span-12" delay={0.5}>
       <div className="flex items-center justify-between mb-5">
         <div>
@@ -201,14 +301,23 @@ export default function CompetitorTopContent() {
             )}
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing || loading}
-          className="flex items-center gap-1.5 text-xs text-primary font-medium hover:opacity-70 transition-opacity disabled:opacity-40 cursor-pointer"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? "Buscando…" : "Atualizar agora"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setConfigOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-text-light font-medium hover:opacity-70 transition-opacity cursor-pointer"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            Configurar
+          </button>
+          <button
+            onClick={() => handleRefresh()}
+            disabled={refreshing || loading}
+            className="flex items-center gap-1.5 text-xs text-primary font-medium hover:opacity-70 transition-opacity disabled:opacity-40 cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Buscando…" : "Atualizar agora"}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -220,7 +329,7 @@ export default function CompetitorTopContent() {
         <div className="flex flex-col items-center justify-center h-48 gap-3">
           <p className="text-sm text-text-medium">Ainda sem dados. Clique em &ldquo;Atualizar agora&rdquo; para buscar os posts.</p>
           <button
-            onClick={handleRefresh}
+            onClick={() => handleRefresh()}
             disabled={refreshing}
             className="px-4 py-2 rounded-xl gradient-primary text-white text-xs font-medium hover:opacity-90 transition-opacity cursor-pointer"
           >
@@ -235,5 +344,15 @@ export default function CompetitorTopContent() {
         </div>
       )}
     </Card>
+
+    {configOpen && (
+      <ConfigModal
+        slug={slug}
+        list={customList}
+        onSave={handleSaveConfig}
+        onClose={() => setConfigOpen(false)}
+      />
+    )}
+  </>
   );
 }

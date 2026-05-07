@@ -9,7 +9,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       <Sidebar />
       <main className="flex-1 ml-72">
         <Header />
-        <div className="px-8 pb-8">
+        <div id="dashboard-main" className="px-8 pb-8">
           {children}
         </div>
       </main>

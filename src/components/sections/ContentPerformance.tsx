@@ -6,9 +6,18 @@ import Card from "@/components/ui/Card";
 import { useAccount } from "@/context/AccountContext";
 import { usePeriod } from "@/context/PeriodContext";
 import { formatNumber, formatPercent } from "@/lib/utils";
-import { Play, Image, CircleDot, ChevronDown, Loader2, Heart, Layers } from "lucide-react";
+import { Play, Image, CircleDot, ChevronDown, Loader2, Heart, Layers, Eye, MessageCircle, MousePointerClick, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InstagramMedia } from "@/lib/instagram-api";
+import type { StoryItem } from "@/app/api/instagram/[slug]/stories/route";
+
+interface StoriesData {
+  stories: StoryItem[];
+  count: number;
+  error?: string;
+  hint?: string;
+  fetchedAt: string;
+}
 
 const tabs = [
   { id: "reels",    label: "Reels",   icon: Play      },
@@ -47,6 +56,8 @@ export default function ContentPerformance() {
 
   const [activeTab, setActiveTab]       = useState<TabId>("reels");
   const [media, setMedia]               = useState<InstagramMedia[]>([]);
+  const [stories, setStories]           = useState<StoriesData | null>(null);
+  const [storiesLoading, setStoriesLoading] = useState(false);
   const [loading, setLoading]           = useState(true);
   const [selectedPost, setSelectedPost] = useState<string>("all");
   const [showPostPicker, setShowPostPicker] = useState(false);
@@ -59,6 +70,16 @@ export default function ContentPerformance() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [slug]);
+
+  useEffect(() => {
+    if (activeTab !== "stories" || stories !== null) return;
+    setStoriesLoading(true);
+    fetch(`/api/instagram/${slug}/stories`)
+      .then(r => r.json())
+      .then(d => setStories(d))
+      .catch(() => setStories({ stories: [], count: 0, error: "Falha ao carregar", fetchedAt: "" }))
+      .finally(() => setStoriesLoading(false));
+  }, [activeTab, slug, stories]);
 
   // Filter by period
   const inPeriod = media.filter((m) => {
@@ -158,11 +179,72 @@ export default function ContentPerformance() {
           exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
 
           {activeTab === "stories" ? (
-            <div className="py-6 text-center">
-              <CircleDot className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-              <p className="text-sm text-text-light">Stories requerem permissão especial da API do Instagram.</p>
-              <p className="text-xs text-text-light mt-1">Disponível com token avançado (instagram_manage_insights).</p>
-            </div>
+            storiesLoading ? (
+              <div className="flex items-center justify-center py-8 gap-2">
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                <p className="text-sm text-text-light">Carregando stories…</p>
+              </div>
+            ) : stories?.error ? (
+              <div className="py-6 text-center">
+                <CircleDot className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                <p className="text-sm text-text-light">{stories.error}</p>
+                {stories.hint && <p className="text-xs text-text-light/70 mt-1 max-w-xs mx-auto">{stories.hint}</p>}
+              </div>
+            ) : stories?.count === 0 ? (
+              <div className="py-6 text-center">
+                <CircleDot className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                <p className="text-sm text-text-light">Nenhum story ativo no momento.</p>
+                <p className="text-xs text-text-light/70 mt-1">Stories expiram em 24h.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Aggregate totals */}
+                {stories && stories.stories.length > 0 && (() => {
+                  const s = stories.stories;
+                  const totalImpr  = s.reduce((a,x)=>a+x.insights.impressions,0);
+                  const totalReach = s.reduce((a,x)=>a+x.insights.reach,0);
+                  const totalReply = s.reduce((a,x)=>a+x.insights.replies,0);
+                  const totalExits = s.reduce((a,x)=>a+x.insights.exits,0);
+                  const totalFwds  = s.reduce((a,x)=>a+x.insights.taps_forward,0);
+                  return (
+                    <>
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        {[
+                          { icon: Eye,              label: "Impressões",  value: totalImpr  },
+                          { icon: Eye,              label: "Alcance",     value: totalReach },
+                          { icon: MessageCircle,    label: "Respostas",   value: totalReply },
+                          { icon: MousePointerClick,label: "Taps →",      value: totalFwds  },
+                          { icon: LogOut,           label: "Saídas",      value: totalExits },
+                          { icon: CircleDot,        label: "Stories",     value: s.length   },
+                        ].map(m => (
+                          <div key={m.label} className="p-2.5 rounded-xl bg-slate-50 text-center">
+                            <p className="text-sm font-bold text-text-dark">{formatNumber(m.value)}</p>
+                            <p className="text-[10px] text-text-light">{m.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Per-story list */}
+                      {s.map((story, i) => (
+                        <div key={story.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50/80 border border-slate-100">
+                          <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            {i+1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] text-text-light">{new Date(story.timestamp).toLocaleString("pt-BR", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" })}</p>
+                            <div className="flex gap-3 text-xs text-text-medium mt-0.5">
+                              <span>{story.insights.impressions} impr.</span>
+                              <span>{story.insights.reach} alcance</span>
+                              <span>{story.insights.replies} resp.</span>
+                              <span>{story.insights.exits} saídas</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
+            )
           ) : count === 0 ? (
             <p className="text-sm text-text-light text-center py-6">
               Nenhum post de {activeTab === "reels" ? "Reel" : "Feed"} nos {period.label.toLowerCase()}.

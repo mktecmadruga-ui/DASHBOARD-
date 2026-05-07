@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Card from "@/components/ui/Card";
 import { useAccount } from "@/context/AccountContext";
+import { usePeriod } from "@/context/PeriodContext";
 import { Sparkles, Clock, Video, FileText, Repeat, X, ChevronRight, Lightbulb, Target, CheckCircle, Loader2, TrendingUp, BarChart2 } from "lucide-react";
 import { cn, formatNumber } from "@/lib/utils";
 import type { InstagramMedia } from "@/lib/instagram-api";
@@ -303,23 +304,50 @@ function InsightModal({ insight, onClose }: { insight: Insight; onClose: () => v
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function AIInsights() {
   const { account } = useAccount();
+  const { period }  = usePeriod();
   const slug = account.id === "william" ? "william" : "madruga";
 
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading]   = useState(true);
+  const [aiSource, setAiSource] = useState<"openai"|"local">("local");
   const [selected, setSelected] = useState<Insight | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/instagram/${slug}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.media && data.profile) {
-          setInsights(generateInsights(data.media, data.profile.followers_count));
+    setInsights([]);
+
+    Promise.all([
+      fetch(`/api/instagram/${slug}`).then(r => r.json()),
+      fetch(`/api/instagram/${slug}/insights?days=${period.days}`).then(r => r.json()),
+      fetch(`/api/instagram/${slug}/best-times`).then(r => r.json()),
+    ]).then(async ([prof, ins, bt]) => {
+      const media     = prof.media ?? [];
+      const followers = prof.profile?.followers_count ?? 1;
+      const totals    = ins.totals ?? {};
+      const bestHours = bt.bestTimes ?? [];
+
+      // Try OpenAI-powered insights first
+      try {
+        const res = await fetch("/api/ai/insights", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slug, media, totals, followers, bestHours }),
+        });
+        const data = await res.json();
+        if (data.insights?.length) {
+          setInsights(data.insights);
+          setAiSource("openai");
+          return;
         }
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      } catch { /* fall through to local */ }
+
+      // Fallback: rule-based local computation
+      setInsights(generateInsights(media, followers));
+      setAiSource("local");
+    })
+    .catch(console.error)
+    .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   return (
@@ -331,7 +359,9 @@ export default function AIInsights() {
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-text-dark">IA Insights</h3>
-            <p className="text-xs text-text-light">Baseado nos seus dados reais · clique para detalhes</p>
+            <p className="text-xs text-text-light">
+            {aiSource === "openai" ? "✨ GPT-4o · dados reais" : "Análise local · dados reais"} · clique para detalhes
+          </p>
           </div>
           {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
         </div>
