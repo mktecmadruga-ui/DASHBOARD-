@@ -125,7 +125,7 @@ export default function AccountGrowth() {
 
       {/* Gráfico Alcance + Seguidores */}
       {timeSeries.length > 0 ? (
-        <LineChartPremium data={timeSeries} series={seriesGrowth} height={200} />
+        <LineChartPremium data={timeSeries} series={seriesGrowth} height={200} xKey="date" />
       ) : !loading ? (
         <div className="h-48 flex items-center justify-center rounded-2xl bg-slate-50 border border-dashed border-slate-200">
           <p className="text-xs text-text-light">Sem dados de alcance para este período.</p>

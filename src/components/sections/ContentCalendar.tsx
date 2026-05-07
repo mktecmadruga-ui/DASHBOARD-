@@ -100,7 +100,7 @@ function usePersistedEvents(slug: string) {
           // Supabase not set up — use localStorage
           setSupEnabled(false);
           const stored = localStorage.getItem(storageKey(slug));
-          setEventsRaw(stored ? JSON.parse(stored) as CalendarEvent[] : defaults);
+          setEventsRaw(stored !== null ? JSON.parse(stored) as CalendarEvent[] : defaults);
         } else if (json.events) {
           setSupEnabled(true);
           const mapped: CalendarEvent[] = (json.events as Array<Record<string,unknown>>).map(r => ({
@@ -112,13 +112,13 @@ function usePersistedEvents(slug: string) {
             scheduledAt: (r.scheduled_at as string | null) ?? undefined,
             legenda:     (r.legenda as string | null) ?? undefined,
           }));
-          setEventsRaw(mapped.length ? mapped : defaults);
+          setEventsRaw(mapped); // use Supabase data as-is, even if empty
         }
       } catch {
         if (cancelled) return;
         setSupEnabled(false);
         const stored = localStorage.getItem(storageKey(slug));
-        setEventsRaw(stored ? JSON.parse(stored) as CalendarEvent[] : defaults);
+        setEventsRaw(stored !== null ? JSON.parse(stored) as CalendarEvent[] : defaults);
       }
     }
     load();
