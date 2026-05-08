@@ -113,6 +113,9 @@ function usePersistedEvents(slug: string) {
             legenda:     (r.legenda as string | null) ?? undefined,
             copy:        (r.copy as string | null) ?? undefined,
             hashtags:    r.hashtags ? (r.hashtags as string).split(",").filter(Boolean) : undefined,
+            creatives:   r.creatives_urls
+              ? (r.creatives_urls as string).split(",").filter(Boolean).map((url: string) => ({ dataUrl: url, name: url.split("/").pop() ?? "criativo" }))
+              : undefined,
           }));
           setEventsRaw(mapped); // use Supabase data as-is, even if empty
         }

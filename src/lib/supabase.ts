@@ -18,7 +18,8 @@ export type DBCalendarEvent = {
   status: string;
   scheduled_at: string | null;
   legenda: string | null;
-  copy: string | null;       // roteiro/script
-  hashtags: string | null;   // comma-separated hashtags (without #)
+  copy: string | null;           // roteiro/script
+  hashtags: string | null;       // comma-separated hashtags (without #)
+  creatives_urls: string | null; // comma-separated image URLs
   created_at?: string;
 };
