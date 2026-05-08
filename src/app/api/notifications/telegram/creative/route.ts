@@ -57,10 +57,8 @@ ${tipoEmoji} <b>${tipoLabel}</b> · ${slugLabel}
 
 👉 <a href="${link}">Abrir no calendário</a>`;
 
-  const r = await sendTelegram({
-    text,
-    dedup: { type: "creative_review", reference_id: String(eventId) },
-  });
+  // No dedup — manual button should always send
+  const r = await sendTelegram({ text });
 
   // If there's a creative image, send it as a photo
   if (creativeUrl && creativeUrl.startsWith("data:image") && r.ok && !r.skipped) {
