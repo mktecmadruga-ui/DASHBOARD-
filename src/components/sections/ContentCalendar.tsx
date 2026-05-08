@@ -112,7 +112,7 @@ function usePersistedEvents(slug: string) {
             scheduledAt: (r.scheduled_at as string | null) ?? undefined,
             legenda:     (r.legenda as string | null) ?? undefined,
             copy:        (r.copy as string | null) ?? undefined,
-            hashtags:    (r.hashtags as string[] | null) ?? undefined,
+            hashtags:    r.hashtags ? (r.hashtags as string).split(",").filter(Boolean) : undefined,
           }));
           setEventsRaw(mapped); // use Supabase data as-is, even if empty
         }

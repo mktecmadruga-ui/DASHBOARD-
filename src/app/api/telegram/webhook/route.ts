@@ -307,6 +307,8 @@ export async function POST(req: NextRequest) {
 
       if (sb && data.tipo && data.slug && data.date && data.titulo) {
         const scheduled_at = data.time ? `${data.date}T${data.time}:00` : null;
+        // Store hashtags as comma-separated text to avoid text[] type issues
+        const hashtagsText = data.hashtags?.length ? data.hashtags.join(",") : null;
         const { error } = await sb.from("calendar_events").insert({
           id: `tg_${Date.now()}`,
           slug: data.slug,
@@ -317,24 +319,11 @@ export async function POST(req: NextRequest) {
           scheduled_at,
           legenda: data.legenda ?? null,
           copy: data.copy ?? null,
-          hashtags: data.hashtags?.length ? data.hashtags : null,
+          hashtags: hashtagsText,
         });
-        if (error) {
-          // Retry without new columns (in case migration hasn't run yet)
-          const { error: error2 } = await sb.from("calendar_events").insert({
-            id: `tg_${Date.now()}`,
-            slug: data.slug,
-            titulo: data.titulo,
-            data: data.date,
-            tipo: data.tipo,
-            status: "planejado",
-            scheduled_at,
-            legenda: data.legenda ?? null,
-          });
-          if (error2) saveError = error2.message;
-        }
+        if (error) saveError = `DB error: ${error.message} (code: ${error.code})`;
       } else {
-        saveError = "Dados incompletos para salvar.";
+        saveError = `Dados incompletos: tipo=${data.tipo} slug=${data.slug} date=${data.date} titulo=${data.titulo}`;
       }
 
       if (saveError) {
