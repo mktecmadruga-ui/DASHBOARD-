@@ -260,17 +260,14 @@ export async function POST(req: NextRequest) {
 
     } else if (action === "edit" && state === "awaiting_approval") {
       await setSession(chat_id, "awaiting_edit", data);
-      await editMessage(chat_id, cq.message.message_id,
-        `✏️ Me manda o que você quer alterar no conteúdo (texto ou áudio):`,
-        { reply_markup: { inline_keyboard: [] } }
-      );
+      // Remove buttons from preview but keep the content visible
+      await editMessage(chat_id, cq.message.message_id, buildPreviewText(data), { reply_markup: { inline_keyboard: [] } });
+      await sendMessage(chat_id, `✏️ Me manda o que você quer alterar (texto ou áudio):`);
 
     } else if (action === "cancel") {
       await clearSession(chat_id);
-      await editMessage(chat_id, cq.message.message_id,
-        "❌ Criação cancelada.",
-        { reply_markup: { inline_keyboard: [] } }
-      );
+      await editMessage(chat_id, cq.message.message_id, buildPreviewText(data), { reply_markup: { inline_keyboard: [] } });
+      await sendMessage(chat_id, "❌ Criação cancelada. Use /novo para começar.");
 
     } else if (action.startsWith("type_")) {
       const tipo = action.replace("type_", "");
