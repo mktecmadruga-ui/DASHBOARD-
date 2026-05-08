@@ -27,7 +27,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return Response.json({ error: "body inválido" }, { status: 400 });
 
-  const { eventId, titulo, tipo, slug, data: date, scheduledAt, legenda, copy, hashtags, creativeUrl } = body;
+  const { eventId, titulo, tipo, slug, data: date, scheduledAt, legenda, copy, hashtags, creativeUrls } = body;
+  // Support both legacy single URL and new array
+  const allCreativeUrls: string[] = Array.isArray(creativeUrls)
+    ? creativeUrls
+    : (body.creativeUrl ? [body.creativeUrl] : []);
 
   const tipoEmoji = TIPO_EMOJI[tipo] ?? "📝";
   const tipoLabel = TIPO_LABEL[tipo] ?? tipo;
@@ -76,24 +80,41 @@ ${tipoEmoji} <b>${tipoLabel}</b> · ${slugLabel}
     const r = await sendTelegram({ text, reply_markup: reviewKeyboard, chat_id: chatId });
     if (r.ok) ok = true;
 
-    // Send photo to each chat
-    if (creativeUrl && r.ok && !r.skipped && BOT_TOKEN) {
+    // Send all creatives in order as a media group (or single photo)
+    if (allCreativeUrls.length > 0 && r.ok && !r.skipped && BOT_TOKEN) {
       try {
-        if (creativeUrl.startsWith("http")) {
-          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        const httpUrls = allCreativeUrls.filter(u => u.startsWith("http"));
+
+        if (httpUrls.length === 1) {
+          // Single file — use sendPhoto or sendVideo
+          const url = httpUrls[0];
+          const isVideo = /\.(mp4|mov|webm)$/i.test(url);
+          const method  = isVideo ? "sendVideo" : "sendPhoto";
+          const field   = isVideo ? "video"     : "photo";
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: chatId, photo: creativeUrl, caption: `🖼️ Criativo: ${escapeHtml(titulo)}` }),
+            body: JSON.stringify({
+              chat_id: chatId,
+              [field]: url,
+              caption: `🖼️ Criativo 1/1 — ${escapeHtml(titulo)}`,
+            }),
           });
-        } else if (creativeUrl.startsWith("data:image")) {
-          const base64  = creativeUrl.split(",")[1];
-          const mimeType = creativeUrl.split(";")[0].split(":")[1];
-          const buffer  = Buffer.from(base64, "base64");
-          const form    = new FormData();
-          form.append("chat_id", chatId);
-          form.append("caption", `🖼️ Criativo: ${escapeHtml(titulo)}`);
-          form.append("photo", new Blob([buffer], { type: mimeType }), "criativo.jpg");
-          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: "POST", body: form });
+        } else if (httpUrls.length > 1) {
+          // Multiple files — send as media group (max 10, Telegram limit)
+          const media = httpUrls.slice(0, 10).map((url, idx) => {
+            const isVideo = /\.(mp4|mov|webm)$/i.test(url);
+            return {
+              type:    isVideo ? "video" : "photo",
+              media:   url,
+              caption: idx === 0 ? `🖼️ ${httpUrls.length} criativos — ${escapeHtml(titulo)}` : undefined,
+            };
+          });
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: chatId, media }),
+          });
         }
       } catch { /* best-effort */ }
     }

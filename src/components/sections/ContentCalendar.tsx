@@ -551,7 +551,10 @@ export default function ContentCalendar() {
           legenda: aiLegenda,
           copy: aiCopy,
           hashtags: aiHashtags,
-          creativeUrl: uploadedCreatives[0]?.dataUrl ?? null,
+          // Send all creatives in selection order (filter out any remaining base64)
+          creativeUrls: uploadedCreatives
+            .filter(c => c.dataUrl.startsWith("http"))
+            .map(c => c.dataUrl),
         }),
       });
       setSendResult(res.ok ? "ok" : "error");
