@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
     status:       body.status,
     scheduled_at: body.scheduledAt ?? null,
     legenda:      body.legenda ?? null,
+    copy:         body.copy ?? null,
+    hashtags:     body.hashtags ?? null,
   };
 
   const { error } = await sb.from("calendar_events").upsert(row, { onConflict: "id" });
