@@ -205,24 +205,69 @@ Regras para hashtags: entre 5 e 8, sem o símbolo #, mix de específicas e ampla
   }
 }
 
-// ─── Preview message ──────────────────────────────────────────────────────────
+// ─── Preview messages ─────────────────────────────────────────────────────────
 
+const TELEGRAM_MAX = 4000; // safe limit (Telegram allows 4096)
+
+/** Split a long text into chunks that fit within Telegram's message limit */
+function splitText(text: string, max = TELEGRAM_MAX): string[] {
+  if (text.length <= max) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= max) { chunks.push(remaining); break; }
+    // Try to split on a newline near the limit
+    const slice = remaining.slice(0, max);
+    const lastNewline = slice.lastIndexOf("\n");
+    const cutAt = lastNewline > max * 0.6 ? lastNewline : max;
+    chunks.push(remaining.slice(0, cutAt));
+    remaining = remaining.slice(cutAt).trimStart();
+  }
+  return chunks;
+}
+
+/** Sends the full preview — roteiro in separate messages if needed, buttons on the last */
+async function sendPreview(chat_id: string, data: SessionData): Promise<number | null> {
+  const tipoEmoji = data.tipo === "reel" ? "🎬" : data.tipo === "carrossel" ? "🎠" : data.tipo === "story" ? "📸" : "📝";
+  const slugLabel = data.slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
+  const hashtagLine = data.hashtags?.length ? `\n\n<code>${data.hashtags.map(h => `#${h}`).join(" ")}</code>` : "";
+
+  const header = `${tipoEmoji} <b>${data.titulo}</b>\n👤 ${slugLabel}\n📅 ${data.date} às ${data.time}`;
+  const roteiro = data.copy ? `📝 <b>Roteiro:</b>\n<i>${data.copy}</i>` : "";
+  const legendaBlock = `📱 <b>Legenda:</b>\n<i>${data.legenda}</i>${hashtagLine}`;
+
+  // Send header + roteiro (split if needed)
+  if (roteiro) {
+    const roteiroChunks = splitText(`${header}\n\n${roteiro}`);
+    for (let i = 0; i < roteiroChunks.length; i++) {
+      await sendMessage(chat_id, roteiroChunks[i]);
+    }
+  } else {
+    await sendMessage(chat_id, header);
+  }
+
+  // Send legenda + hashtags + buttons (this is the message we track for editing)
+  const finalText = `${legendaBlock}\n\nO que deseja fazer?`;
+  const res = await fetch(`${TELEGRAM_BASE}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id,
+      text: finalText,
+      parse_mode: "HTML",
+      reply_markup: APPROVAL_KEYBOARD,
+    }),
+  });
+  const resData = await res.json();
+  return resData.ok ? resData.result.message_id : null;
+}
+
+/** Compact single-message preview for edit confirmation (no buttons) */
 function buildPreviewText(data: SessionData): string {
   const tipoEmoji = data.tipo === "reel" ? "🎬" : data.tipo === "carrossel" ? "🎠" : data.tipo === "story" ? "📸" : "📝";
   const slugLabel = data.slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
   const hashtagLine = data.hashtags?.length ? `\n\n<code>${data.hashtags.map(h => `#${h}`).join(" ")}</code>` : "";
-  return `${tipoEmoji} <b>${data.titulo}</b>
-
-👤 ${slugLabel}
-📅 ${data.date} às ${data.time}
-
-📝 <b>Roteiro:</b>
-<i>${(data.copy ?? "").slice(0, 400)}${(data.copy ?? "").length > 400 ? "…" : ""}</i>
-
-📱 <b>Legenda:</b>
-<i>${data.legenda}</i>${hashtagLine}
-
-O que deseja fazer?`;
+  return `${tipoEmoji} <b>${data.titulo}</b>\n👤 ${slugLabel}\n📅 ${data.date} às ${data.time}\n\n📱 <b>Legenda:</b>\n<i>${data.legenda}</i>${hashtagLine}`;
 }
 
 const APPROVAL_KEYBOARD = {
@@ -443,20 +488,9 @@ Comandos disponíveis:
     const newData: SessionData = { ...data, prompt, titulo: generated.titulo, copy: generated.copy, legenda: generated.legenda, hashtags: generated.hashtags };
     await setSession(chat_id, "awaiting_approval", newData);
 
-    const previewText = buildPreviewText(newData);
-    const sent = await fetch(`${TELEGRAM_BASE}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id,
-        text: previewText,
-        parse_mode: "HTML",
-        reply_markup: APPROVAL_KEYBOARD,
-      }),
-    });
-    const sentData = await sent.json();
-    if (sentData.ok) {
-      newData.preview_msg_id = sentData.result.message_id;
+    const msgId = await sendPreview(chat_id, newData);
+    if (msgId) {
+      newData.preview_msg_id = msgId;
       await setSession(chat_id, "awaiting_approval", newData);
     }
     return new Response("ok");
