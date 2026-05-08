@@ -59,7 +59,9 @@ interface SessionData {
   time?: string;      // HH:MM
   prompt?: string;
   titulo?: string;
+  copy?: string;
   legenda?: string;
+  hashtags?: string[];
   preview_msg_id?: number;
 }
 
@@ -151,10 +153,12 @@ async function transcribeAudio(fileUrl: string): Promise<string | null> {
   return data.text ?? null;
 }
 
-async function generateContent(tipo: string, slug: string, prompt: string): Promise<{ titulo: string; legenda: string } | null> {
+async function generateContent(tipo: string, slug: string, prompt: string): Promise<{ titulo: string; copy: string; legenda: string; hashtags: string[] } | null> {
   if (!OPENAI_KEY) return null;
 
-  const account = slug === "william" ? "William Madruga (contador, advogado, palestrante)" : "Madruga Contabilidade (escritório contábil para PMEs)";
+  const isWilliam = slug === "william";
+  const account = isWilliam ? "William Madruga (contador, advogado e palestrante — perfil pessoal)" : "Madruga Contabilidade (escritório contábil que atende PMEs)";
+  const tom = isWilliam ? "pessoal, especialista e acessível — William fala em primeira pessoa, traduz o técnico para o prático" : "profissional e confiável para PMEs — linguagem leve, foca no impacto no negócio do empresário";
   const tipoLabel = tipo === "reel" ? "Reel" : tipo === "carrossel" ? "Carrossel" : tipo === "story" ? "Story" : "Post de Feed";
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -163,20 +167,25 @@ async function generateContent(tipo: string, slug: string, prompt: string): Prom
     body: JSON.stringify({
       model: "gpt-4o-mini",
       temperature: 0.85,
-      max_tokens: 800,
+      max_tokens: 1200,
       response_format: { type: "json_object" },
       messages: [{
         role: "user",
         content: `Você é um criador de conteúdo para Instagram da conta ${account}.
-Crie um ${tipoLabel} com base no seguinte briefing do cliente:
+Tom: ${tom}
 
+Crie um ${tipoLabel} com base no seguinte briefing:
 "${prompt}"
 
-Retorne APENAS JSON válido:
+Retorne APENAS JSON válido com estes campos:
 {
-  "titulo": "título interno curto (máx 60 chars, para organização)",
-  "legenda": "legenda completa para o post com emojis, hashtags e CTA — tom ${slug === "william" ? "pessoal, especialista e acessível" : "profissional e confiável para PMEs"}"
-}`,
+  "titulo": "título interno curto para organização (máx 60 chars)",
+  "copy": "${tipo === "reel" || tipo === "story" ? "roteiro completo do vídeo dividido por cenas: GANCHO (0-3s), desenvolvimento e CTA final — inclua o que aparece na tela e o que é falado" : "texto completo dos slides do carrossel, um slide por parágrafo"}",
+  "legenda": "legenda do post para Instagram com emojis e CTA (máx 200 palavras, SEM hashtags)",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"]
+}
+
+Regras para hashtags: entre 5 e 8, sem o símbolo #, mix de específicas e amplas.`,
       }],
     }),
   });
@@ -184,7 +193,13 @@ Retorne APENAS JSON válido:
   const json = await res.json();
   const text = json.choices?.[0]?.message?.content ?? "{}";
   try {
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    return {
+      titulo: parsed.titulo ?? "",
+      copy: parsed.copy ?? "",
+      legenda: parsed.legenda ?? "",
+      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
+    };
   } catch {
     return null;
   }
@@ -195,12 +210,17 @@ Retorne APENAS JSON válido:
 function buildPreviewText(data: SessionData): string {
   const tipoEmoji = data.tipo === "reel" ? "🎬" : data.tipo === "carrossel" ? "🎠" : data.tipo === "story" ? "📸" : "📝";
   const slugLabel = data.slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
+  const hashtagLine = data.hashtags?.length ? `\n\n<code>${data.hashtags.map(h => `#${h}`).join(" ")}</code>` : "";
   return `${tipoEmoji} <b>${data.titulo}</b>
 
 👤 ${slugLabel}
 📅 ${data.date} às ${data.time}
 
-<i>${data.legenda}</i>
+📝 <b>Roteiro:</b>
+<i>${(data.copy ?? "").slice(0, 400)}${(data.copy ?? "").length > 400 ? "…" : ""}</i>
+
+📱 <b>Legenda:</b>
+<i>${data.legenda}</i>${hashtagLine}
 
 O que deseja fazer?`;
 }
@@ -249,6 +269,8 @@ export async function POST(req: NextRequest) {
           status: "planejado",
           scheduled_at,
           legenda: data.legenda ?? null,
+          copy: data.copy ?? null,
+          hashtags: data.hashtags?.length ? data.hashtags : null,
         });
       }
 
@@ -418,7 +440,7 @@ Comandos disponíveis:
       return new Response("ok");
     }
 
-    const newData: SessionData = { ...data, prompt, titulo: generated.titulo, legenda: generated.legenda };
+    const newData: SessionData = { ...data, prompt, titulo: generated.titulo, copy: generated.copy, legenda: generated.legenda, hashtags: generated.hashtags };
     await setSession(chat_id, "awaiting_approval", newData);
 
     const previewText = buildPreviewText(newData);

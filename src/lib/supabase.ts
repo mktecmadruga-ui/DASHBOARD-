@@ -18,5 +18,7 @@ export type DBCalendarEvent = {
   status: string;
   scheduled_at: string | null;
   legenda: string | null;
+  copy: string | null;       // roteiro/script
+  hashtags: string[] | null; // array of hashtag strings (without #)
   created_at?: string;
 };
