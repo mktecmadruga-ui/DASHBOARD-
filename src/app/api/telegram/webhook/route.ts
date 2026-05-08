@@ -8,6 +8,11 @@
 import { getSupabase } from "@/lib/supabase";
 import { NextRequest } from "next/server";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export const dynamic = "force-dynamic";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -50,7 +55,7 @@ async function getFileUrl(file_id: string): Promise<string | null> {
 
 // ─── Session helpers ─────────────────────────────────────────────────────────
 
-type SessionState = "idle" | "awaiting_type" | "awaiting_account" | "awaiting_date" | "awaiting_time" | "awaiting_prompt" | "awaiting_edit" | "awaiting_approval";
+type SessionState = "idle" | "awaiting_type" | "awaiting_account" | "awaiting_date" | "awaiting_time" | "awaiting_prompt" | "awaiting_edit" | "awaiting_approval" | "awaiting_change_request";
 
 interface SessionData {
   tipo?: string;
@@ -63,6 +68,9 @@ interface SessionData {
   legenda?: string;
   hashtags?: string[];
   preview_msg_id?: number;
+  // For review flow
+  review_event_id?: string;
+  review_titulo?: string;
 }
 
 async function getSession(chat_id: string): Promise<{ state: SessionState; data: SessionData }> {
@@ -281,6 +289,15 @@ const APPROVAL_KEYBOARD = {
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // Validate Telegram secret token (set via setWebhook with secret_token param)
+  const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (expectedSecret) {
+    const provided = req.headers.get("x-telegram-bot-api-secret-token");
+    if (provided !== expectedSecret) {
+      return new Response("forbidden", { status: 403 });
+    }
+  }
+
   const body = await req.json().catch(() => null);
   if (!body) return new Response("ok");
 
@@ -364,6 +381,30 @@ export async function POST(req: NextRequest) {
       const newData = { ...data, slug };
       await setSession(chat_id, "awaiting_date", newData);
       await sendMessage(chat_id, `📅 Para qual data?\n\n<i>Ex: hoje, amanhã, 15/05, 20 de maio</i>`);
+
+    // ── Review callbacks (from "📤 William" button in calendar) ──
+    } else if (action.startsWith("rev_approve_")) {
+      const eventId = action.replace("rev_approve_", "");
+      const sb = getSupabase();
+      if (sb) {
+        await sb.from("calendar_events").update({ status: "agendado" }).eq("id", eventId);
+      }
+      await editMessage(chat_id, cq.message.message_id,
+        `✅ <b>Criativo aprovado e agendado!</b>\n\nO post foi marcado como agendado no calendário.`,
+        { reply_markup: { inline_keyboard: [] } }
+      );
+      await clearSession(chat_id);
+
+    } else if (action.startsWith("rev_change_")) {
+      const eventId = action.replace("rev_change_", "");
+      await setSession(chat_id, "awaiting_change_request", { review_event_id: eventId });
+      // Remove buttons from the message
+      await fetch(`${TELEGRAM_BASE}/editMessageReplyMarkup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }),
+      });
+      await sendMessage(chat_id, `✏️ Descreve as alterações que queres no criativo:`);
     }
 
     return new Response("ok");
@@ -504,6 +545,28 @@ Comandos disponíveis:
       newData.preview_msg_id = msgId;
       await setSession(chat_id, "awaiting_approval", newData);
     }
+    return new Response("ok");
+  }
+
+  // ── awaiting_change_request — William sent his change notes ──
+  if (state === "awaiting_change_request") {
+    if (!text) {
+      await sendMessage(chat_id, "Manda as alterações em texto 📝");
+      return new Response("ok");
+    }
+
+    const eventId = data.review_event_id;
+    if (eventId) {
+      const sb = getSupabase();
+      if (sb) {
+        await sb.from("calendar_events")
+          .update({ alteracoes: text })
+          .eq("id", eventId);
+      }
+    }
+
+    await clearSession(chat_id);
+    await sendMessage(chat_id, `✅ Alterações registradas no calendário!`);
     return new Response("ok");
   }
 

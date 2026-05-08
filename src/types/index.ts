@@ -71,6 +71,7 @@ export interface CalendarEvent {
   creative?: string;          // legacy single
   creativeName?: string;
   creatives?: { dataUrl: string; name: string }[]; // up to 10
+  alteracoes?: string;        // change requests from William
 }
 
 export interface AlertItem {

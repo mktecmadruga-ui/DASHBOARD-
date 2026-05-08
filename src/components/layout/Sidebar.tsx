@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createBrowserClient } from "@supabase/ssr";
 import {
   LayoutDashboard, BarChart3, TrendingUp, Users, Heart,
   Zap, Filter, Sparkles, Calendar, Target, Settings, Activity,
-  UserCheck,
+  UserCheck, LogOut, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AccountSwitcher from "@/components/ui/AccountSwitcher";
@@ -29,6 +31,17 @@ const navItems = [
 export default function Sidebar() {
   const [active, setActive] = useState("overview");
   const { account } = useAccount();
+  const router = useRouter();
+
+  async function handleLogout() {
+    const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (sbUrl && sbKey) {
+      const sb = createBrowserClient(sbUrl, sbKey);
+      await sb.auth.signOut();
+    }
+    router.push("/login");
+  }
 
   function scrollTo(sectionId: string, id: string) {
     setActive(id);
@@ -93,6 +106,18 @@ export default function Sidebar() {
           <span>Leads</span>
           <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded-md font-semibold">NEW</span>
         </Link>
+      </div>
+
+      {/* Admin + Logout */}
+      <div className="px-4 pb-2 flex gap-1">
+        <Link href="/admin"
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all cursor-pointer">
+          <ShieldCheck className="w-3.5 h-3.5"/> Usuários
+        </Link>
+        <button onClick={handleLogout}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all cursor-pointer">
+          <LogOut className="w-3.5 h-3.5"/> Sair
+        </button>
       </div>
 
       {/* Profile — dinâmico */}

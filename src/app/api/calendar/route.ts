@@ -37,32 +37,15 @@ export async function POST(req: NextRequest) {
   if (!sb) return notConfigured();
 
   const body = await req.json();
-  // Upload base64 creatives to /api/upload and store URLs
+  // Creatives are uploaded from the client before saving — expect https:// URLs only (never base64)
   let creativesUrls: string[] = [];
   if (Array.isArray(body.creatives) && body.creatives.length > 0) {
-    const host = req.headers.get("host") ?? "";
-    const protocol = host.includes("localhost") ? "http" : "https";
-    const baseUrl = `${protocol}://${host}`;
     for (const c of body.creatives as { dataUrl: string; name: string }[]) {
-      if (!c.dataUrl.startsWith("data:")) {
-        creativesUrls.push(c.dataUrl); // already a URL
-        continue;
-      }
-      try {
-        const formData = new FormData();
-        const base64 = c.dataUrl.split(",")[1];
-        const mimeType = c.dataUrl.split(";")[0].split(":")[1];
-        const buffer = Buffer.from(base64, "base64");
-        formData.append("file", new Blob([buffer], { type: mimeType }), c.name || "criativo.jpg");
-        const uploadRes = await fetch(`${baseUrl}/api/upload`, { method: "POST", body: formData });
-        if (uploadRes.ok) {
-          const { url } = await uploadRes.json();
-          if (url) creativesUrls.push(url);
-        }
-      } catch { /* skip failed uploads */ }
+      // Only store actual URLs — never store base64 in the DB
+      if (c.dataUrl && c.dataUrl.startsWith("http")) creativesUrls.push(c.dataUrl);
     }
   } else if (typeof body.creatives_urls === "string") {
-    creativesUrls = body.creatives_urls.split(",").filter(Boolean);
+    creativesUrls = body.creatives_urls.split("|").filter(Boolean);
   }
 
   const row: DBCalendarEvent = {
@@ -75,8 +58,9 @@ export async function POST(req: NextRequest) {
     scheduled_at:    body.scheduledAt ?? null,
     legenda:         body.legenda ?? null,
     copy:            body.copy ?? null,
-    hashtags:        body.hashtags ?? null,
-    creatives_urls:  creativesUrls.length ? creativesUrls.join(",") : null,
+    hashtags:        Array.isArray(body.hashtags) ? body.hashtags.join(",") : (body.hashtags ?? null),
+    creatives_urls:  creativesUrls.length ? creativesUrls.join("|") : null,
+    alteracoes:      body.alteracoes ?? null,
   };
 
   const { error } = await sb.from("calendar_events").upsert(row, { onConflict: "id" });

@@ -1,12 +1,19 @@
 import { NextRequest } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { getSupabase } from "@/lib/supabase";
 
 /**
  * POST /api/upload
  * Body: { dataUrl: string, name: string }
- * Returns: { url: string } — publicly accessible URL for Instagram API
+ * Returns: { url: string }
+ *
+ * Stores files in Supabase Storage bucket "creatives".
+ * Falls back to base64 data URL if Supabase is not configured.
  */
+export const dynamic = "force-dynamic";
+
+const MAX_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
+const ALLOWED_MIME = /^(image\/(jpeg|jpg|png|webp|gif)|video\/(mp4|quicktime|webm))$/;
+
 export async function POST(req: NextRequest) {
   try {
     const { dataUrl, name } = await req.json();
@@ -23,23 +30,38 @@ export async function POST(req: NextRequest) {
 
     const mimeType = matches[1];
     const base64   = matches[2];
-    const buffer   = Buffer.from(base64, "base64");
+
+    // Validate MIME type — block executables, scripts, etc.
+    if (!ALLOWED_MIME.test(mimeType)) {
+      return Response.json({ error: "Tipo de arquivo não permitido" }, { status: 400 });
+    }
+
+    const buffer = Buffer.from(base64, "base64");
+    if (buffer.length > MAX_SIZE_BYTES) {
+      return Response.json({ error: "Arquivo muito grande (máx 25MB)" }, { status: 413 });
+    }
+
+    const sb = getSupabase();
+    if (!sb) {
+      // Supabase not configured — return the dataUrl as-is (localStorage mode)
+      return Response.json({ url: dataUrl, mimeType });
+    }
 
     // Build safe filename with timestamp
-    const ext      = mimeType.split("/")[1]?.replace("jpeg","jpg") ?? "jpg";
+    const ext      = mimeType.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
     const safeName = `${Date.now()}-${name.replace(/[^a-zA-Z0-9._-]/g, "_")}.${ext}`;
-    const uploadDir= join(process.cwd(), "public", "uploads");
-    const filePath = join(uploadDir, safeName);
 
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(filePath, buffer);
+    const { error } = await sb.storage
+      .from("creatives")
+      .upload(safeName, buffer, { contentType: mimeType, upsert: false });
 
-    // Return public URL — works in production when deployed to a real domain
-    const host    = req.headers.get("host") ?? "localhost:3000";
-    const protocol= host.includes("localhost") ? "http" : "https";
-    const url     = `${protocol}://${host}/uploads/${safeName}`;
+    if (error) {
+      console.error("Supabase storage upload error:", error);
+      return Response.json({ error: error.message }, { status: 500 });
+    }
 
-    return Response.json({ url, mimeType });
+    const { data: publicData } = sb.storage.from("creatives").getPublicUrl(safeName);
+    return Response.json({ url: publicData.publicUrl, mimeType });
   } catch (e) {
     console.error("Upload error:", e);
     return Response.json({ error: "Falha no upload" }, { status: 500 });

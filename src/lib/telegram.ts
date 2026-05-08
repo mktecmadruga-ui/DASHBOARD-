@@ -14,6 +14,8 @@ export async function sendTelegram(opts: {
   dedup?: { type: string; reference_id: string };
   parse_mode?: "HTML" | "Markdown";
   disable_preview?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  reply_markup?: Record<string, unknown>;
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   if (!BOT_TOKEN) return { ok: false, error: "TELEGRAM_BOT_TOKEN não configurado" };
 
@@ -43,6 +45,7 @@ export async function sendTelegram(opts: {
       text: opts.text,
       parse_mode: opts.parse_mode ?? "HTML",
       disable_web_page_preview: opts.disable_preview ?? false,
+      ...(opts.reply_markup && { reply_markup: opts.reply_markup }),
     }),
   });
   const data = await res.json();

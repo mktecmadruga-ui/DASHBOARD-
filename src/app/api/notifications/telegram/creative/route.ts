@@ -8,7 +8,9 @@ import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const PROD_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://madruga-dashboard.vercel.app";
+const PROD_URL     = process.env.NEXT_PUBLIC_APP_URL ?? "https://madruga-dashboard.vercel.app";
+const ALLOWED_CHATS = (process.env.TELEGRAM_ALLOWED_CHATS ?? process.env.TELEGRAM_CHAT_ID_WILLIAM ?? "")
+  .split(",").map(s => s.trim()).filter(Boolean);
 
 const TIPO_EMOJI: Record<string, string> = {
   reel: "🎬", carrossel: "🎠", story: "📸", feed: "📝",
@@ -57,32 +59,45 @@ ${tipoEmoji} <b>${tipoLabel}</b> · ${slugLabel}
 
 👉 <a href="${link}">Abrir no calendário</a>`;
 
-  // No dedup — manual button should always send
-  const r = await sendTelegram({ text });
+  // Inline review buttons for William
+  const reviewKeyboard = {
+    inline_keyboard: [[
+      { text: "✅ Aprovar",         callback_data: `rev_approve_${eventId}` },
+      { text: "✏️ Pedir alteração", callback_data: `rev_change_${eventId}`  },
+    ]],
+  };
 
-  // If there's a creative image, send it as a photo
-  if (creativeUrl && creativeUrl.startsWith("data:image") && r.ok && !r.skipped) {
-    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-    const CHAT_ID = process.env.TELEGRAM_CHAT_ID_WILLIAM;
-    if (BOT_TOKEN && CHAT_ID) {
-      // Convert base64 to blob and send as photo
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const targets   = ALLOWED_CHATS.length ? ALLOWED_CHATS : [process.env.TELEGRAM_CHAT_ID_WILLIAM ?? ""];
+
+  let ok = false;
+  for (const chatId of targets) {
+    if (!chatId) continue;
+    const r = await sendTelegram({ text, reply_markup: reviewKeyboard, chat_id: chatId });
+    if (r.ok) ok = true;
+
+    // Send photo to each chat
+    if (creativeUrl && r.ok && !r.skipped && BOT_TOKEN) {
       try {
-        const base64 = creativeUrl.split(",")[1];
-        const mimeType = creativeUrl.split(";")[0].split(":")[1];
-        const buffer = Buffer.from(base64, "base64");
-        const form = new FormData();
-        form.append("chat_id", CHAT_ID);
-        form.append("caption", `🖼️ Criativo: ${escapeHtml(titulo)}`);
-        form.append("photo", new Blob([buffer], { type: mimeType }), "criativo.jpg");
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-          method: "POST",
-          body: form,
-        });
-      } catch {
-        // Photo sending is best-effort — don't fail the request
-      }
+        if (creativeUrl.startsWith("http")) {
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: chatId, photo: creativeUrl, caption: `🖼️ Criativo: ${escapeHtml(titulo)}` }),
+          });
+        } else if (creativeUrl.startsWith("data:image")) {
+          const base64  = creativeUrl.split(",")[1];
+          const mimeType = creativeUrl.split(";")[0].split(":")[1];
+          const buffer  = Buffer.from(base64, "base64");
+          const form    = new FormData();
+          form.append("chat_id", chatId);
+          form.append("caption", `🖼️ Criativo: ${escapeHtml(titulo)}`);
+          form.append("photo", new Blob([buffer], { type: mimeType }), "criativo.jpg");
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, { method: "POST", body: form });
+        }
+      } catch { /* best-effort */ }
     }
   }
 
-  return Response.json({ ok: r.ok, skipped: r.skipped, error: r.error });
+  return Response.json({ ok });
 }
