@@ -303,9 +303,11 @@ export async function POST(req: NextRequest) {
     if (action === "approve" && state === "awaiting_approval") {
       // Save to calendar
       const sb = getSupabase();
+      let saveError: string | null = null;
+
       if (sb && data.tipo && data.slug && data.date && data.titulo) {
         const scheduled_at = data.time ? `${data.date}T${data.time}:00` : null;
-        await sb.from("calendar_events").insert({
+        const { error } = await sb.from("calendar_events").insert({
           id: `tg_${Date.now()}`,
           slug: data.slug,
           titulo: data.titulo,
@@ -317,13 +319,33 @@ export async function POST(req: NextRequest) {
           copy: data.copy ?? null,
           hashtags: data.hashtags?.length ? data.hashtags : null,
         });
+        if (error) {
+          // Retry without new columns (in case migration hasn't run yet)
+          const { error: error2 } = await sb.from("calendar_events").insert({
+            id: `tg_${Date.now()}`,
+            slug: data.slug,
+            titulo: data.titulo,
+            data: data.date,
+            tipo: data.tipo,
+            status: "planejado",
+            scheduled_at,
+            legenda: data.legenda ?? null,
+          });
+          if (error2) saveError = error2.message;
+        }
+      } else {
+        saveError = "Dados incompletos para salvar.";
       }
 
-      await editMessage(chat_id, cq.message.message_id,
-        `✅ <b>Conteúdo salvo no calendário!</b>\n\n${buildPreviewText(data)}`,
-        { reply_markup: { inline_keyboard: [] } }
-      );
-      await clearSession(chat_id);
+      if (saveError) {
+        await sendMessage(chat_id, `❌ Erro ao salvar no calendário: <code>${saveError}</code>\n\nTente aprovar novamente ou verifique o Supabase.`);
+      } else {
+        await editMessage(chat_id, cq.message.message_id,
+          `✅ <b>Conteúdo salvo no calendário!</b>\n\n${buildPreviewText(data)}`,
+          { reply_markup: { inline_keyboard: [] } }
+        );
+        await clearSession(chat_id);
+      }
 
     } else if (action === "edit" && state === "awaiting_approval") {
       await setSession(chat_id, "awaiting_edit", data);
