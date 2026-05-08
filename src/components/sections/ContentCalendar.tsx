@@ -412,6 +412,42 @@ export default function ContentCalendar() {
     setModalOpen(false);
   }
 
+  const [sending, setSending] = React.useState(false);
+  const [sendResult, setSendResult] = React.useState<"ok"|"error"|null>(null);
+
+  async function saveAndNotifyWilliam() {
+    if (!titulo.trim()) return;
+    // Save first
+    save();
+    setSending(true);
+    setSendResult(null);
+    try {
+      const eventId = selected?.id ?? `c${Date.now()}`;
+      const res = await fetch("/api/notifications/telegram/creative", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          titulo,
+          tipo,
+          slug,
+          data,
+          scheduledAt,
+          legenda: aiLegenda,
+          copy: aiCopy,
+          hashtags: aiHashtags,
+          creativeUrl: creatives[0]?.dataUrl ?? null,
+        }),
+      });
+      setSendResult(res.ok ? "ok" : "error");
+    } catch {
+      setSendResult("error");
+    } finally {
+      setSending(false);
+      setTimeout(() => setSendResult(null), 3000);
+    }
+  }
+
   function remove() {
     if (!selected) return;
     setEvents(prev => prev.filter(e => e.id !== selected.id));
@@ -814,6 +850,11 @@ export default function ContentCalendar() {
             <button type="button" onClick={save} disabled={!titulo.trim()}
               className="flex-1 py-2.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
               {selected?"Salvar":"Criar"}
+            </button>
+            <button type="button" onClick={saveAndNotifyWilliam} disabled={!titulo.trim() || sending}
+              title="Salvar e enviar para William revisar no Telegram"
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-white cursor-pointer hover:bg-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+              {sending ? "Enviando…" : sendResult === "ok" ? "✅ Enviado!" : sendResult === "error" ? "❌ Erro" : "📤 William"}
             </button>
           </div>
         </div>
