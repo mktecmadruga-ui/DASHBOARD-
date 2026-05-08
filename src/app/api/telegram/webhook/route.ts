@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELEGRAM_BASE = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
-const WILLIAM_CHAT = process.env.TELEGRAM_CHAT_ID_WILLIAM;
+const ALLOWED_CHATS = (process.env.TELEGRAM_ALLOWED_CHATS ?? process.env.TELEGRAM_CHAT_ID_WILLIAM ?? "").split(",").map(s => s.trim()).filter(Boolean);
 
 // ─── Telegram API helpers ────────────────────────────────────────────────────
 
@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
     await answerCallback(cq.id);
 
     // Security: only William can use this bot
-    if (WILLIAM_CHAT && chat_id !== WILLIAM_CHAT) {
+    if (ALLOWED_CHATS.length > 0 && !ALLOWED_CHATS.includes(chat_id)) {
       await sendMessage(chat_id, "⛔ Acesso não autorizado.");
       return new Response("ok");
     }
@@ -301,9 +301,15 @@ export async function POST(req: NextRequest) {
   const chat_id = String(msg.chat.id);
   const text = (msg.text ?? "").trim();
 
+  // ── /meuid — always allowed, before security check ──
+  if (text === "/meuid") {
+    await sendMessage(chat_id, `🆔 Seu chat ID é: <code>${chat_id}</code>`);
+    return new Response("ok");
+  }
+
   // Security
-  if (WILLIAM_CHAT && chat_id !== WILLIAM_CHAT) {
-    await sendMessage(chat_id, "⛔ Acesso não autorizado.");
+  if (ALLOWED_CHATS.length > 0 && !ALLOWED_CHATS.includes(chat_id)) {
+    await sendMessage(chat_id, `⛔ Acesso não autorizado.\n\nSeu chat ID: <code>${chat_id}</code>`);
     return new Response("ok");
   }
 
@@ -340,7 +346,14 @@ export async function POST(req: NextRequest) {
 
 Comandos disponíveis:
 /novo — Criar novo conteúdo para o calendário
-/cancelar — Cancelar operação em andamento`);
+/cancelar — Cancelar operação em andamento
+/meuid — Ver seu chat ID`);
+    return new Response("ok");
+  }
+
+  // ── /meuid — show chat id (for setup) ──
+  if (text === "/meuid") {
+    await sendMessage(chat_id, `🆔 Seu chat ID é: <code>${chat_id}</code>`);
     return new Response("ok");
   }
 
