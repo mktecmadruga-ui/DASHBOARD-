@@ -737,16 +737,16 @@ export default function ContentCalendar() {
             {/* View toggle */}
             <div className="flex border border-slate-200 rounded-xl overflow-hidden">
               <button type="button" onClick={() => setView("calendar")}
-                title="Calendário"
-                className={cn("px-2.5 py-1.5 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium",
+                className={cn("px-3 py-1.5 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium",
                   view === "calendar" ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-text-medium")}>
                 <CalendarDays className="w-3.5 h-3.5"/>
+                Calendário
               </button>
               <button type="button" onClick={() => setView("kanban")}
-                title="Kanban"
-                className={cn("px-2.5 py-1.5 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium border-l border-slate-200",
+                className={cn("px-3 py-1.5 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium border-l border-slate-200",
                   view === "kanban" ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-text-medium")}>
                 <Kanban className="w-3.5 h-3.5"/>
+                Kanban
               </button>
             </div>
             {view === "calendar" && (
