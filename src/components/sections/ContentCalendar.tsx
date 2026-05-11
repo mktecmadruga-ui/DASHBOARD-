@@ -584,11 +584,34 @@ export default function ContentCalendar() {
   const [view, setView] = useState<"calendar" | "kanban">("calendar");
 
   // Drag-and-drop state (kanban)
-  const dragId = useRef<string | null>(null);
+  const dragId  = useRef<string | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null); // which column is active drop target
+
   function handleDragStart(evId: string) { dragId.current = evId; }
-  function handleDragOver(e: React.DragEvent) { e.preventDefault(); }
+
+  function handleDragEnd() { dragId.current = null; setDragOver(null); }
+
+  // Must preventDefault on EVERY element inside the column, not just the column root,
+  // otherwise the cursor shows "no-drop" when hovering child nodes and the drop fires nowhere.
+  function preventDefault(e: React.DragEvent) { e.preventDefault(); e.stopPropagation(); }
+
+  function handleColDragOver(e: React.DragEvent, colStatus: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(colStatus);
+  }
+
+  function handleColDragLeave(e: React.DragEvent) {
+    // Only clear if leaving the column entirely (not moving to a child)
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setDragOver(null);
+    }
+  }
+
   function handleDrop(e: React.DragEvent, targetStatus: CalendarEvent["status"]) {
     e.preventDefault();
+    e.stopPropagation();
+    setDragOver(null);
     if (!dragId.current) return;
     setEvents(prev => prev.map(ev =>
       ev.id === dragId.current ? { ...ev, status: targetStatus } : ev
@@ -678,8 +701,14 @@ export default function ContentCalendar() {
               const colEvents = events.filter(e => e.status === col.status);
               return (
                 <div key={col.status}
-                  className={cn("flex flex-col gap-2 min-w-[180px] flex-1 rounded-2xl border p-3 transition-colors", col.bg, col.border)}
-                  onDragOver={handleDragOver}
+                  className={cn(
+                    "flex flex-col gap-2 min-w-[180px] flex-1 rounded-2xl border-2 p-3 transition-all duration-150",
+                    dragOver === col.status
+                      ? "border-primary/60 bg-primary/5 scale-[1.01]"
+                      : cn(col.bg, col.border)
+                  )}
+                  onDragOver={e => handleColDragOver(e, col.status)}
+                  onDragLeave={handleColDragLeave}
                   onDrop={e => handleDrop(e, col.status)}>
                   {/* Column header */}
                   <div className="flex items-center justify-between mb-1">
@@ -689,39 +718,46 @@ export default function ContentCalendar() {
                     </span>
                   </div>
                   {/* Cards */}
-                  <div className="flex flex-col gap-2 min-h-[60px]">
+                  <div className="flex flex-col gap-2 min-h-[60px]"
+                    onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}>
                     {colEvents.map(ev => (
-                      <motion.div key={ev.id}
+                      <div key={ev.id}
                         draggable
-                        onDragStart={() => handleDragStart(ev.id)}
-                        whileHover={{ scale: 1.02 }}
-                        whileDrag={{ scale: 1.05, opacity: 0.85 }}
+                        onDragStart={e => { e.stopPropagation(); handleDragStart(ev.id); }}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={preventDefault}
                         onClick={() => openEdit(ev)}
                         className={cn(
-                          "p-2.5 rounded-xl border bg-white shadow-sm cursor-grab active:cursor-grabbing text-[11px] select-none",
+                          "p-2.5 rounded-xl border bg-white shadow-sm cursor-grab active:cursor-grabbing text-[11px] select-none transition-opacity",
+                          dragId.current === ev.id ? "opacity-40" : "opacity-100",
                           ev.alteracoes ? "border-red-300 bg-red-50" : "border-slate-200"
                         )}>
-                        <div className="flex items-center gap-1.5 mb-1">
+                        <div className="flex items-center gap-1.5 mb-1 pointer-events-none">
                           <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusDot[ev.status])}/>
                           <span className="text-text-light text-[10px]">{tipoOpts.find(t=>t.value===ev.tipo)?.label}</span>
                           <span className="text-text-light text-[10px] ml-auto">{ev.data.slice(5).replace("-","/")} </span>
                         </div>
                         {ev.alteracoes && (
-                          <p className="text-[9px] font-semibold text-red-500 mb-1">⚠️ Alterações</p>
+                          <p className="text-[9px] font-semibold text-red-500 mb-1 pointer-events-none">⚠️ Alterações</p>
                         )}
-                        <p className="font-medium text-text-dark leading-tight line-clamp-2">{ev.titulo}</p>
-                        <div className="flex items-center gap-1.5 mt-1.5">
+                        <p className="font-medium text-text-dark leading-tight line-clamp-2 pointer-events-none">{ev.titulo}</p>
+                        <div className="flex items-center gap-1.5 mt-1.5 pointer-events-none">
                           {ev.copy      && <Sparkles  className="w-3 h-3 text-slate-300"/>}
                           {(ev.creatives?.length || ev.creative) && <ImageIcon className="w-3 h-3 text-slate-300"/>}
                           {ev.driveUrl  && <Globe     className="w-3 h-3 text-slate-300"/>}
                           {ev.scheduledAt && <Clock   className="w-3 h-3 text-success"/>}
                         </div>
-                      </motion.div>
+                      </div>
                     ))}
-                    {/* Drop zone hint when empty */}
+                    {/* Drop zone hint */}
                     {colEvents.length === 0 && (
-                      <div className="flex-1 flex items-center justify-center rounded-xl border-2 border-dashed border-current/20 py-4 opacity-40">
-                        <span className={cn("text-[10px]", col.color)}>Arraste aqui</span>
+                      <div className={cn(
+                        "flex-1 flex items-center justify-center rounded-xl border-2 border-dashed py-6 transition-colors pointer-events-none",
+                        dragOver === col.status ? "border-primary/40 bg-primary/5" : "border-slate-200 opacity-40"
+                      )}>
+                        <span className={cn("text-[10px]", dragOver === col.status ? "text-primary" : col.color)}>
+                          {dragOver === col.status ? "Solte aqui" : "Arraste aqui"}
+                        </span>
                       </div>
                     )}
                   </div>
