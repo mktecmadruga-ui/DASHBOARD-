@@ -10,7 +10,7 @@ import {
   ChevronLeft, ChevronRight, Sparkles, Loader2,
   Copy, Check, Hash, AlignLeft, FileText, Globe,
   Upload, X as XIcon, Image as ImageIcon, Clock, Send,
-  CheckCircle2, AlertCircle,
+  CheckCircle2, AlertCircle, CalendarDays, Kanban,
 } from "lucide-react";
 import type { CalendarEvent } from "@/types";
 import { createBrowserClient } from "@supabase/ssr";
@@ -580,6 +580,30 @@ export default function ContentCalendar() {
   const startLabel = `${days[0].getDate()} ${MONTHS[days[0].getMonth()]}`;
   const endLabel   = `${days[6].getDate()} ${MONTHS[days[6].getMonth()]} ${days[6].getFullYear()}`;
 
+  // View toggle
+  const [view, setView] = useState<"calendar" | "kanban">("calendar");
+
+  // Drag-and-drop state (kanban)
+  const dragId = useRef<string | null>(null);
+  function handleDragStart(evId: string) { dragId.current = evId; }
+  function handleDragOver(e: React.DragEvent) { e.preventDefault(); }
+  function handleDrop(e: React.DragEvent, targetStatus: CalendarEvent["status"]) {
+    e.preventDefault();
+    if (!dragId.current) return;
+    setEvents(prev => prev.map(ev =>
+      ev.id === dragId.current ? { ...ev, status: targetStatus } : ev
+    ));
+    dragId.current = null;
+  }
+
+  const kanbanCols: { status: CalendarEvent["status"]; label: string; color: string; bg: string; border: string }[] = [
+    { status: "rascunho",  label: "Rascunho",       color: "text-slate-500",  bg: "bg-slate-100",    border: "border-slate-200" },
+    { status: "roteiro",   label: "Roteiro pronto",  color: "text-warning",    bg: "bg-warning/10",   border: "border-warning/30" },
+    { status: "criativo",  label: "Criativo pronto", color: "text-info",       bg: "bg-info/10",      border: "border-info/30" },
+    { status: "agendado",  label: "Agendado",        color: "text-success",    bg: "bg-success/10",   border: "border-success/30" },
+    { status: "publicado", label: "Publicado",       color: "text-primary",    bg: "bg-primary/10",   border: "border-primary/30" },
+  ];
+
   return (
     <>
       <Card delay={0.6}>
@@ -590,18 +614,37 @@ export default function ContentCalendar() {
             <p className="text-sm text-text-light mt-0.5">{startLabel} – {endLabel}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={goToday}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 text-text-medium hover:bg-slate-50 cursor-pointer transition-colors">
-              Hoje
-            </button>
+            {/* View toggle */}
             <div className="flex border border-slate-200 rounded-xl overflow-hidden">
-              <button type="button" onClick={prevWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors">
-                <ChevronLeft className="w-4 h-4 text-text-medium"/>
+              <button type="button" onClick={() => setView("calendar")}
+                title="Calendário"
+                className={cn("px-2.5 py-1.5 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium",
+                  view === "calendar" ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-text-medium")}>
+                <CalendarDays className="w-3.5 h-3.5"/>
               </button>
-              <button type="button" onClick={nextWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors border-l border-slate-200">
-                <ChevronRight className="w-4 h-4 text-text-medium"/>
+              <button type="button" onClick={() => setView("kanban")}
+                title="Kanban"
+                className={cn("px-2.5 py-1.5 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium border-l border-slate-200",
+                  view === "kanban" ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-text-medium")}>
+                <Kanban className="w-3.5 h-3.5"/>
               </button>
             </div>
+            {view === "calendar" && (
+              <>
+                <button type="button" onClick={goToday}
+                  className="px-2.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 text-text-medium hover:bg-slate-50 cursor-pointer transition-colors">
+                  Hoje
+                </button>
+                <div className="flex border border-slate-200 rounded-xl overflow-hidden">
+                  <button type="button" onClick={prevWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors">
+                    <ChevronLeft className="w-4 h-4 text-text-medium"/>
+                  </button>
+                  <button type="button" onClick={nextWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors border-l border-slate-200">
+                    <ChevronRight className="w-4 h-4 text-text-medium"/>
+                  </button>
+                </div>
+              </>
+            )}
             <button type="button" onClick={()=>openNew()}
               className="px-3 py-1.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity">
               + Adicionar
@@ -628,8 +671,68 @@ export default function ContentCalendar() {
           )}
         </AnimatePresence>
 
+        {/* Kanban board */}
+        {view === "kanban" && (
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+            {kanbanCols.map(col => {
+              const colEvents = events.filter(e => e.status === col.status);
+              return (
+                <div key={col.status}
+                  className={cn("flex flex-col gap-2 min-w-[180px] flex-1 rounded-2xl border p-3 transition-colors", col.bg, col.border)}
+                  onDragOver={handleDragOver}
+                  onDrop={e => handleDrop(e, col.status)}>
+                  {/* Column header */}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={cn("text-xs font-semibold", col.color)}>{col.label}</span>
+                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md", col.bg, col.color, "border", col.border)}>
+                      {colEvents.length}
+                    </span>
+                  </div>
+                  {/* Cards */}
+                  <div className="flex flex-col gap-2 min-h-[60px]">
+                    {colEvents.map(ev => (
+                      <motion.div key={ev.id}
+                        draggable
+                        onDragStart={() => handleDragStart(ev.id)}
+                        whileHover={{ scale: 1.02 }}
+                        whileDrag={{ scale: 1.05, opacity: 0.85 }}
+                        onClick={() => openEdit(ev)}
+                        className={cn(
+                          "p-2.5 rounded-xl border bg-white shadow-sm cursor-grab active:cursor-grabbing text-[11px] select-none",
+                          ev.alteracoes ? "border-red-300 bg-red-50" : "border-slate-200"
+                        )}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusDot[ev.status])}/>
+                          <span className="text-text-light text-[10px]">{tipoOpts.find(t=>t.value===ev.tipo)?.label}</span>
+                          <span className="text-text-light text-[10px] ml-auto">{ev.data.slice(5).replace("-","/")} </span>
+                        </div>
+                        {ev.alteracoes && (
+                          <p className="text-[9px] font-semibold text-red-500 mb-1">⚠️ Alterações</p>
+                        )}
+                        <p className="font-medium text-text-dark leading-tight line-clamp-2">{ev.titulo}</p>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          {ev.copy      && <Sparkles  className="w-3 h-3 text-slate-300"/>}
+                          {(ev.creatives?.length || ev.creative) && <ImageIcon className="w-3 h-3 text-slate-300"/>}
+                          {ev.driveUrl  && <Globe     className="w-3 h-3 text-slate-300"/>}
+                          {ev.scheduledAt && <Clock   className="w-3 h-3 text-success"/>}
+                        </div>
+                      </motion.div>
+                    ))}
+                    {/* Drop zone hint when empty */}
+                    {colEvents.length === 0 && (
+                      <div className="flex-1 flex items-center justify-center rounded-xl border-2 border-dashed border-current/20 py-4 opacity-40">
+                        <span className={cn("text-[10px]", col.color)}>Arraste aqui</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Week grid */}
-        <div className="grid grid-cols-7 gap-2">
+        {view === "calendar" && (<div className="grid grid-cols-7 gap-2">
           {days.map(day => {
             const dateStr   = toStr(day);
             const dayEvents = events.filter(e => e.data === dateStr);
@@ -682,7 +785,7 @@ export default function ContentCalendar() {
               </div>
             );
           })}
-        </div>
+        </div>)}
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-4 border-t border-slate-50">
