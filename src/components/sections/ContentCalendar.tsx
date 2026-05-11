@@ -19,7 +19,7 @@ import {
   PointerSensor, useSensor, useSensors, closestCorners,
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
+// @dnd-kit/utilities reserved for future sortable use
 
 // ─── Per-profile storage keys ─────────────────────────────────────────────────
 const storageKey = (slug: string) => `calendar_events_v3_${slug}`;
@@ -156,10 +156,9 @@ function KanbanCard({ ev, statusDot, tipoOpts, onCardClick }: {
   );
 }
 
-function KanbanColumn({ col, events, activeDragId, statusDot, tipoOpts, onCardClick }: {
+function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick }: {
   col: KanbanCol;
   events: CalendarEvent[];
-  activeDragId: string | null;
   statusDot: Record<string, string>;
   tipoOpts: { value: string; label: string }[];
   onCardClick: (ev: CalendarEvent) => void;
@@ -805,7 +804,6 @@ export default function ContentCalendar() {
                   key={col.status}
                   col={col}
                   events={events.filter(e => e.status === col.status)}
-                  activeDragId={activeDragId}
                   statusDot={statusDot}
                   tipoOpts={tipoOpts}
                   onCardClick={openEdit}
