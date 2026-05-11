@@ -14,6 +14,12 @@ import {
 } from "lucide-react";
 import type { CalendarEvent } from "@/types";
 import { createBrowserClient } from "@supabase/ssr";
+import {
+  DndContext, DragOverlay, useDroppable, useDraggable,
+  PointerSensor, useSensor, useSensors,
+  type DragEndEvent, type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 // ─── Per-profile storage keys ─────────────────────────────────────────────────
 const storageKey = (slug: string) => `calendar_events_v3_${slug}`;
@@ -80,6 +86,118 @@ function toStr(d: Date) {
 function getMonday(d: Date) {
   const day = d.getDay(), diff = day===0?-6:1-day, m = new Date(d);
   m.setDate(d.getDate()+diff); m.setHours(0,0,0,0); return m;
+}
+
+// ─── Kanban sub-components ────────────────────────────────────────────────────
+
+type KanbanCol = { status: CalendarEvent["status"]; label: string; color: string; bg: string; border: string };
+
+function KanbanCardInner({ ev, statusDot, tipoOpts }: {
+  ev: CalendarEvent;
+  statusDot: Record<string, string>;
+  tipoOpts: { value: string; label: string }[];
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-1.5 mb-1">
+        <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusDot[ev.status])}/>
+        <span className="text-text-light text-[10px]">{tipoOpts.find(t=>t.value===ev.tipo)?.label}</span>
+        <span className="text-text-light text-[10px] ml-auto">{ev.data.slice(5).replace("-","/")} </span>
+      </div>
+      {ev.alteracoes && <p className="text-[9px] font-semibold text-red-500 mb-1">⚠️ Alterações</p>}
+      <p className="font-medium text-text-dark leading-tight line-clamp-2 text-[11px]">{ev.titulo}</p>
+      <div className="flex items-center gap-1.5 mt-1.5">
+        {ev.copy      && <Sparkles  className="w-3 h-3 text-slate-300"/>}
+        {(ev.creatives?.length || ev.creative) && <ImageIcon className="w-3 h-3 text-slate-300"/>}
+        {ev.driveUrl  && <Globe     className="w-3 h-3 text-slate-300"/>}
+        {ev.scheduledAt && <Clock   className="w-3 h-3 text-success"/>}
+      </div>
+    </>
+  );
+}
+
+function KanbanCardGhost({ ev, statusDot, tipoOpts }: {
+  ev: CalendarEvent;
+  statusDot: Record<string, string>;
+  tipoOpts: { value: string; label: string }[];
+}) {
+  return (
+    <div className={cn(
+      "p-2.5 rounded-xl border bg-white shadow-xl text-[11px] select-none w-[180px] rotate-2 opacity-90",
+      ev.alteracoes ? "border-red-300 bg-red-50" : "border-primary/40"
+    )}>
+      <KanbanCardInner ev={ev} statusDot={statusDot} tipoOpts={tipoOpts}/>
+    </div>
+  );
+}
+
+function KanbanCard({ ev, statusDot, tipoOpts, onCardClick }: {
+  ev: CalendarEvent;
+  statusDot: Record<string, string>;
+  tipoOpts: { value: string; label: string }[];
+  onCardClick: (ev: CalendarEvent) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: ev.id });
+  const style = { transform: CSS.Translate.toString(transform) };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      onClick={() => !isDragging && onCardClick(ev)}
+      className={cn(
+        "p-2.5 rounded-xl border bg-white shadow-sm text-[11px] select-none transition-opacity",
+        "cursor-grab active:cursor-grabbing touch-none",
+        isDragging ? "opacity-30" : "opacity-100",
+        ev.alteracoes ? "border-red-300 bg-red-50" : "border-slate-200"
+      )}>
+      <KanbanCardInner ev={ev} statusDot={statusDot} tipoOpts={tipoOpts}/>
+    </div>
+  );
+}
+
+function KanbanColumn({ col, events, activeDragId, statusDot, tipoOpts, onCardClick }: {
+  col: KanbanCol;
+  events: CalendarEvent[];
+  activeDragId: string | null;
+  statusDot: Record<string, string>;
+  tipoOpts: { value: string; label: string }[];
+  onCardClick: (ev: CalendarEvent) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: col.status });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex flex-col gap-2 min-w-[180px] flex-1 rounded-2xl border-2 p-3 transition-all duration-150",
+        isOver ? "border-primary/60 bg-primary/5 scale-[1.01]" : cn(col.bg, col.border)
+      )}>
+      <div className="flex items-center justify-between mb-1">
+        <span className={cn("text-xs font-semibold", col.color)}>{col.label}</span>
+        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md border", col.bg, col.color, col.border)}>
+          {events.length}
+        </span>
+      </div>
+      <div className="flex flex-col gap-2 min-h-[80px]">
+        {events.map(ev => (
+          <KanbanCard key={ev.id} ev={ev} statusDot={statusDot} tipoOpts={tipoOpts} onCardClick={onCardClick}/>
+        ))}
+        {events.length === 0 && (
+          <div className={cn(
+            "flex-1 flex items-center justify-center rounded-xl border-2 border-dashed py-6 transition-colors",
+            isOver ? "border-primary/40 bg-primary/5" : "border-slate-200 opacity-40"
+          )}>
+            <span className={cn("text-[10px]", isOver ? "text-primary" : col.color)}>
+              {isOver ? "Solte aqui" : "Arraste aqui"}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─── Persistent events hook (Supabase with localStorage fallback) ─────────────
@@ -583,40 +701,22 @@ export default function ContentCalendar() {
   // View toggle
   const [view, setView] = useState<"calendar" | "kanban">("calendar");
 
-  // Drag-and-drop state (kanban)
-  const dragId  = useRef<string | null>(null);
-  const [dragOver, setDragOver] = useState<string | null>(null); // which column is active drop target
+  // Drag-and-drop (kanban) — via @dnd-kit/core
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  function handleDragStart(evId: string) { dragId.current = evId; }
-
-  function handleDragEnd() { dragId.current = null; setDragOver(null); }
-
-  // Must preventDefault on EVERY element inside the column, not just the column root,
-  // otherwise the cursor shows "no-drop" when hovering child nodes and the drop fires nowhere.
-  function preventDefault(e: React.DragEvent) { e.preventDefault(); e.stopPropagation(); }
-
-  function handleColDragOver(e: React.DragEvent, colStatus: string) {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(colStatus);
+  function onDndDragStart(event: DragStartEvent) {
+    setActiveDragId(String(event.active.id));
   }
 
-  function handleColDragLeave(e: React.DragEvent) {
-    // Only clear if leaving the column entirely (not moving to a child)
-    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
-      setDragOver(null);
-    }
-  }
-
-  function handleDrop(e: React.DragEvent, targetStatus: CalendarEvent["status"]) {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(null);
-    if (!dragId.current) return;
+  function onDndDragEnd(event: DragEndEvent) {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const targetStatus = over.id as CalendarEvent["status"];
     setEvents(prev => prev.map(ev =>
-      ev.id === dragId.current ? { ...ev, status: targetStatus } : ev
+      ev.id === active.id ? { ...ev, status: targetStatus } : ev
     ));
-    dragId.current = null;
   }
 
   const kanbanCols: { status: CalendarEvent["status"]; label: string; color: string; bg: string; border: string }[] = [
@@ -696,75 +796,29 @@ export default function ContentCalendar() {
 
         {/* Kanban board */}
         {view === "kanban" && (
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-            {kanbanCols.map(col => {
-              const colEvents = events.filter(e => e.status === col.status);
-              return (
-                <div key={col.status}
-                  className={cn(
-                    "flex flex-col gap-2 min-w-[180px] flex-1 rounded-2xl border-2 p-3 transition-all duration-150",
-                    dragOver === col.status
-                      ? "border-primary/60 bg-primary/5 scale-[1.01]"
-                      : cn(col.bg, col.border)
-                  )}
-                  onDragOver={e => handleColDragOver(e, col.status)}
-                  onDragLeave={handleColDragLeave}
-                  onDrop={e => handleDrop(e, col.status)}>
-                  {/* Column header */}
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={cn("text-xs font-semibold", col.color)}>{col.label}</span>
-                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md", col.bg, col.color, "border", col.border)}>
-                      {colEvents.length}
-                    </span>
-                  </div>
-                  {/* Cards */}
-                  <div className="flex flex-col gap-2 min-h-[60px]"
-                    onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}>
-                    {colEvents.map(ev => (
-                      <div key={ev.id}
-                        draggable
-                        onDragStart={e => { e.stopPropagation(); handleDragStart(ev.id); }}
-                        onDragEnd={handleDragEnd}
-                        onDragOver={preventDefault}
-                        onClick={() => openEdit(ev)}
-                        className={cn(
-                          "p-2.5 rounded-xl border bg-white shadow-sm cursor-grab active:cursor-grabbing text-[11px] select-none transition-opacity",
-                          dragId.current === ev.id ? "opacity-40" : "opacity-100",
-                          ev.alteracoes ? "border-red-300 bg-red-50" : "border-slate-200"
-                        )}>
-                        <div className="flex items-center gap-1.5 mb-1 pointer-events-none">
-                          <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", statusDot[ev.status])}/>
-                          <span className="text-text-light text-[10px]">{tipoOpts.find(t=>t.value===ev.tipo)?.label}</span>
-                          <span className="text-text-light text-[10px] ml-auto">{ev.data.slice(5).replace("-","/")} </span>
-                        </div>
-                        {ev.alteracoes && (
-                          <p className="text-[9px] font-semibold text-red-500 mb-1 pointer-events-none">⚠️ Alterações</p>
-                        )}
-                        <p className="font-medium text-text-dark leading-tight line-clamp-2 pointer-events-none">{ev.titulo}</p>
-                        <div className="flex items-center gap-1.5 mt-1.5 pointer-events-none">
-                          {ev.copy      && <Sparkles  className="w-3 h-3 text-slate-300"/>}
-                          {(ev.creatives?.length || ev.creative) && <ImageIcon className="w-3 h-3 text-slate-300"/>}
-                          {ev.driveUrl  && <Globe     className="w-3 h-3 text-slate-300"/>}
-                          {ev.scheduledAt && <Clock   className="w-3 h-3 text-success"/>}
-                        </div>
-                      </div>
-                    ))}
-                    {/* Drop zone hint */}
-                    {colEvents.length === 0 && (
-                      <div className={cn(
-                        "flex-1 flex items-center justify-center rounded-xl border-2 border-dashed py-6 transition-colors pointer-events-none",
-                        dragOver === col.status ? "border-primary/40 bg-primary/5" : "border-slate-200 opacity-40"
-                      )}>
-                        <span className={cn("text-[10px]", dragOver === col.status ? "text-primary" : col.color)}>
-                          {dragOver === col.status ? "Solte aqui" : "Arraste aqui"}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <DndContext
+            sensors={dndSensors}
+            onDragStart={onDndDragStart}
+            onDragEnd={onDndDragEnd}>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {kanbanCols.map(col => (
+                <KanbanColumn
+                  key={col.status}
+                  col={col}
+                  events={events.filter(e => e.status === col.status)}
+                  activeDragId={activeDragId}
+                  statusDot={statusDot}
+                  tipoOpts={tipoOpts}
+                  onCardClick={openEdit}
+                />
+              ))}
+            </div>
+            <DragOverlay dropAnimation={null}>
+              {activeDragId ? (
+                <KanbanCardGhost ev={events.find(e => e.id === activeDragId)!} statusDot={statusDot} tipoOpts={tipoOpts}/>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         )}
 
         {/* Week grid */}
