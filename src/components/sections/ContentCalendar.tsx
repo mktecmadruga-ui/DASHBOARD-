@@ -16,7 +16,7 @@ import type { CalendarEvent } from "@/types";
 import { createBrowserClient } from "@supabase/ssr";
 import {
   DndContext, DragOverlay, useDroppable, useDraggable,
-  PointerSensor, useSensor, useSensors,
+  PointerSensor, useSensor, useSensors, closestCorners,
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
@@ -137,20 +137,18 @@ function KanbanCard({ ev, statusDot, tipoOpts, onCardClick }: {
   tipoOpts: { value: string; label: string }[];
   onCardClick: (ev: CalendarEvent) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: ev.id });
-  const style = { transform: CSS.Translate.toString(transform) };
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: ev.id });
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
       {...listeners}
       {...attributes}
       onClick={() => !isDragging && onCardClick(ev)}
       className={cn(
-        "p-2.5 rounded-xl border bg-white shadow-sm text-[11px] select-none transition-opacity",
+        "p-2.5 rounded-xl border bg-white shadow-sm text-[11px] select-none",
         "cursor-grab active:cursor-grabbing touch-none",
-        isDragging ? "opacity-30" : "opacity-100",
+        isDragging ? "invisible pointer-events-none" : "visible",
         ev.alteracoes ? "border-red-300 bg-red-50" : "border-slate-200"
       )}>
       <KanbanCardInner ev={ev} statusDot={statusDot} tipoOpts={tipoOpts}/>
@@ -172,7 +170,7 @@ function KanbanColumn({ col, events, activeDragId, statusDot, tipoOpts, onCardCl
     <div
       ref={setNodeRef}
       className={cn(
-        "flex flex-col gap-2 min-w-[180px] flex-1 rounded-2xl border-2 p-3 transition-all duration-150",
+        "flex flex-col gap-2 min-w-[180px] flex-1 min-h-[320px] rounded-2xl border-2 p-3 transition-all duration-150",
         isOver ? "border-primary/60 bg-primary/5 scale-[1.01]" : cn(col.bg, col.border)
       )}>
       <div className="flex items-center justify-between mb-1">
@@ -798,6 +796,7 @@ export default function ContentCalendar() {
         {view === "kanban" && (
           <DndContext
             sensors={dndSensors}
+            collisionDetection={closestCorners}
             onDragStart={onDndDragStart}
             onDragEnd={onDndDragEnd}>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
