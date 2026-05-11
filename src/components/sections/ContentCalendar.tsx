@@ -326,6 +326,8 @@ export default function ContentCalendar() {
 
   // Alterações (change requests from William)
   const [alteracoes, setAlteracoes] = useState("");
+  // Drive link for Reel video (only used when tipo === "reel")
+  const [driveUrl, setDriveUrl]     = useState("");
 
   // AI
   const [aiLoading,    setAiLoading]    = useState(false);
@@ -354,7 +356,7 @@ export default function ContentCalendar() {
     setSelected(null); setTitulo(""); setData(dateStr ?? todayStr);
     setScheduledAt(dateStr ? `${dateStr}T18:00` : "");
     setTipo("reel"); setStatus("agendado"); resetAI();
-    setCreatives([]); setAlteracoes(""); setUploadWarning(false);
+    setCreatives([]); setAlteracoes(""); setDriveUrl(""); setUploadWarning(false);
     setModalOpen(true);
   }
 
@@ -367,7 +369,7 @@ export default function ContentCalendar() {
     setAiResearched(false);
     const saved = ev.creatives ?? (ev.creative ? [{ dataUrl: ev.creative, name: ev.creativeName ?? "criativo" }] : []);
     setCreatives(saved);
-    setAlteracoes(ev.alteracoes ?? ""); setUploadWarning(false);
+    setAlteracoes(ev.alteracoes ?? ""); setDriveUrl(ev.driveUrl ?? ""); setUploadWarning(false);
     setModalOpen(true);
   }
 
@@ -486,6 +488,7 @@ export default function ContentCalendar() {
       ...(aiHashtags.length  && { hashtags: aiHashtags }),
       ...(creatives.length   && { creatives }),
       ...(alteracoes         && { alteracoes }),
+      ...(driveUrl           && { driveUrl }),
     };
     setEvents(prev => selected
       ? prev.map(e => e.id === selected.id ? ev : e)
@@ -525,6 +528,7 @@ export default function ContentCalendar() {
       ...(aiHashtags.length  && { hashtags: aiHashtags }),
       ...(creatives.length   && { creatives }),
       ...(alteracoes         && { alteracoes }),
+      ...(driveUrl           && { driveUrl }),
     };
     setEvents(prev => selected
       ? prev.map(e => e.id === selected.id ? ev : e)
@@ -555,6 +559,7 @@ export default function ContentCalendar() {
           creativeUrls: uploadedCreatives
             .filter(c => c.dataUrl.startsWith("http"))
             .map(c => c.dataUrl),
+          ...(driveUrl && { driveUrl }),
         }),
       });
       setSendResult(res.ok ? "ok" : "error");
@@ -987,6 +992,23 @@ export default function ContentCalendar() {
               </p>
             )}
           </div>
+
+          {/* Drive link — only for Reels */}
+          {tipo === "reel" && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-text-medium flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-slate-400"/>
+                Link do Drive (vídeo do Reel)
+              </label>
+              <input
+                type="url"
+                value={driveUrl}
+                onChange={e => setDriveUrl(e.target.value)}
+                placeholder="https://drive.google.com/..."
+                className="w-full px-3 py-2.5 rounded-xl text-sm border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-slate-300"
+              />
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-2 pt-1">

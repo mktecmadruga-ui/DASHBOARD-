@@ -72,6 +72,7 @@ export interface CalendarEvent {
   creativeName?: string;
   creatives?: { dataUrl: string; name: string }[]; // up to 10
   alteracoes?: string;        // change requests from William
+  driveUrl?: string;          // Google Drive link for Reel video file
 }
 
 export interface AlertItem {

@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return Response.json({ error: "body inválido" }, { status: 400 });
 
-  const { eventId, titulo, tipo, slug, data: date, scheduledAt, legenda, copy, hashtags, creativeUrls } = body;
+  const { eventId, titulo, tipo, slug, data: date, scheduledAt, legenda, copy, hashtags, creativeUrls, driveUrl } = body;
   // Support both legacy single URL and new array
   const allCreativeUrls: string[] = Array.isArray(creativeUrls)
     ? creativeUrls
@@ -54,12 +54,16 @@ export async function POST(req: NextRequest) {
     ? `\n\n📱 <b>Legenda:</b>\n<i>${escapeHtml(String(legenda))}</i>${hashtagLine}`
     : "";
 
+  const driveSection = driveUrl
+    ? `\n\n🎬 <b>Vídeo:</b> <a href="${driveUrl}">Abrir no Drive</a>`
+    : "";
+
   const text = `🎨 <b>Criativo pronto para revisão</b>
 
 ${tipoEmoji} <b>${tipoLabel}</b> · ${slugLabel}
 📅 ${dateStr}${timeStr ? ` às ${timeStr}` : ""}
 
-<b>${escapeHtml(titulo)}</b>${copySection}${legendaSection}
+<b>${escapeHtml(titulo)}</b>${copySection}${legendaSection}${driveSection}
 
 👉 <a href="${link}">Abrir no calendário</a>`;
 
