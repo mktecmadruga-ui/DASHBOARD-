@@ -156,12 +156,13 @@ function KanbanCard({ ev, statusDot, tipoOpts, onCardClick }: {
   );
 }
 
-function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick }: {
+function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick, onIdeaClick }: {
   col: KanbanCol;
   events: CalendarEvent[];
   statusDot: Record<string, string>;
   tipoOpts: { value: string; label: string }[];
   onCardClick: (ev: CalendarEvent) => void;
+  onIdeaClick?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: col.status });
 
@@ -193,6 +194,15 @@ function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick }: {
           </div>
         )}
       </div>
+      {onIdeaClick && (
+        <button
+          type="button"
+          onClick={onIdeaClick}
+          className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 text-primary text-[11px] font-medium transition-all cursor-pointer">
+          <Sparkles className="w-3 h-3"/>
+          💡 Nova Ideia com IA
+        </button>
+      )}
     </div>
   );
 }
@@ -455,6 +465,53 @@ export default function ContentCalendar() {
 
   const hasAI = !!(aiCopy || aiLegenda || aiHashtags.length);
 
+  // ── Idea modal (Rascunho column) ────────────────────────────────────────────
+  const [ideaOpen,       setIdeaOpen]       = useState(false);
+  const [ideaText,       setIdeaText]       = useState("");
+  const [ideaVideoUrl,   setIdeaVideoUrl]   = useState("");
+  const [ideaLoading,    setIdeaLoading]    = useState(false);
+  const [ideaError,      setIdeaError]      = useState("");
+  const [ideaResult,     setIdeaResult]     = useState<{
+    titulo: string; tipo: string; prompt: string; justificativa: string; transcript?: string; transcriptError?: string;
+  } | null>(null);
+
+  function openIdeaModal() {
+    setIdeaText(""); setIdeaVideoUrl(""); setIdeaResult(null); setIdeaError(""); setIdeaOpen(true);
+  }
+
+  async function formatIdeia() {
+    if (!ideaText.trim() && !ideaVideoUrl.trim()) return;
+    setIdeaLoading(true); setIdeaError(""); setIdeaResult(null);
+    try {
+      const res  = await fetch("/api/ai/format-idea", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawIdea: ideaText, videoUrl: ideaVideoUrl || undefined, slug }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro desconhecido");
+      setIdeaResult(json);
+    } catch (e: unknown) {
+      setIdeaError(e instanceof Error ? e.message : "Erro ao formatar ideia");
+    } finally { setIdeaLoading(false); }
+  }
+
+  function createFromIdea() {
+    if (!ideaResult) return;
+    setIdeaOpen(false);
+    // Pre-fill the new event modal with the formatted idea
+    setSelected(null);
+    setTitulo(ideaResult.titulo);
+    setData(todayStr);
+    setScheduledAt(`${todayStr}T18:00`);
+    setTipo(ideaResult.tipo as CalendarEvent["tipo"]);
+    setStatus("rascunho");
+    setPrompt(ideaResult.prompt);
+    resetAI();
+    setCreatives([]); setAlteracoes(""); setDriveUrl(""); setUploadWarning(false);
+    setModalOpen(true);
+  }
+
   const days     = Array.from({length:7},(_,i)=>{ const d=new Date(weekStart); d.setDate(weekStart.getDate()+i); return d; });
   const todayStr = toStr(new Date());
 
@@ -509,7 +566,7 @@ export default function ContentCalendar() {
     try {
       const res  = await fetch("/api/ai/generate-content", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ titulo, tipo, prompt }),
+        body: JSON.stringify({ titulo, tipo, prompt, slug }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Erro desconhecido");
@@ -870,6 +927,7 @@ export default function ContentCalendar() {
                   statusDot={statusDot}
                   tipoOpts={tipoOpts}
                   onCardClick={openEdit}
+                  onIdeaClick={col.status === "rascunho" ? openIdeaModal : undefined}
                 />
               ))}
             </div>
@@ -881,6 +939,95 @@ export default function ContentCalendar() {
           </DndContext>
         </div>
       </Card>
+
+      {/* ─── Idea Modal ──────────────────────────────────────────────────── */}
+      <Modal open={ideaOpen} onClose={() => setIdeaOpen(false)} title="💡 Nova Ideia com IA">
+        <div className="flex flex-col gap-4">
+          <p className="text-xs text-text-light leading-relaxed">
+            Descreva sua ideia bruta (ou cole uma URL do YouTube) e a IA vai estruturar um briefing completo no estilo do William para usar como prompt na geração de conteúdo.
+          </p>
+
+          {/* Ideia bruta */}
+          <div>
+            <label className="text-xs font-medium text-text-medium block mb-1.5">Ideia bruta</label>
+            <textarea
+              value={ideaText}
+              onChange={e => setIdeaText(e.target.value)}
+              placeholder="Ex: falar sobre a nova tributação de dividendos que vai mudar tudo pra empresa..."
+              rows={4}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all resize-none"/>
+          </div>
+
+          {/* URL do vídeo */}
+          <div>
+            <label className="text-xs font-medium text-text-medium block mb-1.5">
+              URL do vídeo YouTube <span className="text-slate-400 font-normal">(opcional — a IA transcreve e usa como base)</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-text-light flex-shrink-0"/>
+              <input
+                value={ideaVideoUrl}
+                onChange={e => setIdeaVideoUrl(e.target.value)}
+                placeholder="https://youtube.com/watch?v=..."
+                className="flex-1 h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"/>
+            </div>
+          </div>
+
+          {/* Error */}
+          {ideaError && (
+            <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{ideaError}</p>
+          )}
+
+          {/* Result */}
+          {ideaResult && (
+            <div className="flex flex-col gap-3 p-4 rounded-2xl bg-primary/5 border border-primary/15">
+              {ideaResult.transcriptError && (
+                <p className="text-[11px] text-warning bg-warning/10 rounded-lg px-2.5 py-1.5">
+                  ⚠️ Transcrição: {ideaResult.transcriptError}
+                </p>
+              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-primary">{ideaResult.titulo}</span>
+                <span className={cn("text-[10px] px-2 py-0.5 rounded-lg font-medium border", typeColors[ideaResult.tipo] ?? "bg-slate-100 text-slate-500 border-slate-200")}>
+                  {tipoOpts.find(t => t.value === ideaResult.tipo)?.label ?? ideaResult.tipo}
+                </span>
+              </div>
+              <p className="text-xs text-text-medium leading-relaxed line-clamp-4">{ideaResult.prompt}</p>
+              {ideaResult.justificativa && (
+                <p className="text-[11px] text-text-light italic">{ideaResult.justificativa}</p>
+              )}
+              {ideaResult.transcript && (
+                <details className="cursor-pointer">
+                  <summary className="text-[11px] text-text-light hover:text-text-medium transition-colors">Ver transcrição usada</summary>
+                  <p className="mt-1.5 text-[10px] text-text-light leading-relaxed max-h-28 overflow-y-auto">{ideaResult.transcript}</p>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={formatIdeia}
+              disabled={ideaLoading || (!ideaText.trim() && !ideaVideoUrl.trim())}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed">
+              {ideaLoading
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin"/> Formatando...</>
+                : <><Sparkles className="w-3.5 h-3.5"/> Formatar com IA</>}
+            </button>
+            {ideaResult && (
+              <button
+                type="button"
+                onClick={createFromIdea}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border border-primary text-primary cursor-pointer hover:bg-primary/5 transition-colors">
+                <FileText className="w-3.5 h-3.5"/>
+                Criar Rascunho
+              </button>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       {/* ─── Create / Edit Modal ─────────────────────────────────────────── */}
       <Modal open={modalOpen} onClose={()=>setModalOpen(false)}

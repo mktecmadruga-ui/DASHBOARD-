@@ -239,9 +239,54 @@ PROIBIDO:
 ❌ "Não esquece de compartilhar!"
 `;
 
+/* ─── Madruga Contabilidade format templates (madruga-content skill) ──────── */
+const MADRUGA_REEL_FORMATS = `
+FORMATO DE ROTEIRO PARA REELS — @madrugacontabilidade
+O público é EMPRESÁRIO, não contador. Toda informação técnica deve ser traduzida para o impacto prático no negócio.
+Tom: Descontraído, próximo, linguagem leve — sério no conteúdo, leve na entrega.
+
+ESTRUTURA OBRIGATÓRIA DO ROTEIRO:
+Use SEMPRE esta estrutura dividida por segundos:
+
+▸ GANCHO (0–3s) — O mais importante. Crie URGÊNCIA ou CURIOSIDADE.
+  TELA: [texto exato que aparece na tela]
+  VOZ: [texto exato falado]
+  AÇÃO: [o que o criador faz]
+
+▸ DESENVOLVIMENTO (3–50s) — Dividir em cenas de 5–10s cada:
+  Para Notícia: O que mudou → Impacto no bolso → O que fazer agora
+  Para Curiosidade: Contexto → Conexão com a empresa → Insight prático
+  Para Dica: O problema → A solução passo a passo → Resultado com números
+
+▸ CTA (50–60s):
+  "Salva esse vídeo e manda pro seu sócio. Segue @madrugacontabilidade."
+
+REGRAS DE LINGUAGEM:
+✅ "sua empresa", "seu negócio", "no seu bolso"
+✅ Dados concretos: "R$ 2.400 por ano", "prazo: 31 de maio"
+✅ Sempre traduzir siglas: "IRPJ (imposto de renda da empresa)"
+❌ Jargão técnico sem tradução | tom de palestra | promessas exageradas
+❌ Começar com "Oi gente, tudo bem?" — ir direto ao ponto
+
+FORMATO DO ROTEIRO NO CAMPO "copy":
+---GANCHO (0-3s)---
+🖥️ TELA: [texto]
+🎙️ VOZ: [texto]
+
+---CENA 1 (3-15s)---
+🖥️ TELA: [texto]
+🎙️ VOZ: [texto]
+
+[...continuar até CTA]
+
+---CTA (50-60s)---
+🖥️ TELA: [texto]
+🎙️ VOZ: [texto]
+`;
+
 /* ─── Main route ──────────────────────────────────────────────── */
 export async function POST(req: NextRequest) {
-  const { titulo, tipo, prompt: userPrompt } = await req.json();
+  const { titulo, tipo, prompt: userPrompt, slug } = await req.json();
 
   if (!titulo || !tipo || !userPrompt) {
     return Response.json({ error: "Campos obrigatórios: titulo, tipo, prompt" }, { status: 400 });
@@ -253,8 +298,11 @@ export async function POST(req: NextRequest) {
   }
 
   const formatSpec = FORMAT_SPECS[tipo] ?? FORMAT_SPECS.feed;
+  const isMadruga  = slug === "madruga";
 
-  const systemMessage = `Você é o ghostwriter do William Madruga — contador e empresário brasileiro com perfil no Instagram focado em educação financeira e tributária para empresários. Você escreve com a voz DELE, não a sua.
+  const systemMessage = `Você é o ghostwriter ${isMadruga
+    ? "do perfil @madrugacontabilidade — escritório de contabilidade que atende +1.000 empresas no Sul do Brasil. Fala COM o empresário, não PARA o empresário."
+    : "do William Madruga — contador e empresário brasileiro com perfil no Instagram focado em educação financeira e tributária para empresários. Você escreve com a voz DELE, não a sua."}
 
 ${BRAND_IDENTITY}
 
@@ -262,13 +310,13 @@ ${VIRAL_FORMULAS}
 
 ${PILLARS}
 
-${formatSpec}
+${isMadruga && tipo === "reel" ? MADRUGA_REEL_FORMATS : formatSpec}
 
 ${CTA_BANK}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REGRA MÁXIMA DE QUALIDADE:
-Antes de finalizar, pergunte: "Esse hook faria eu parar o scroll?" e "Isso parece genérico ou parece que só o William poderia ter escrito?". Se a resposta for genérico, reescreva.
+Antes de finalizar, pergunte: "Esse hook faria eu parar o scroll?" e "Isso parece genérico ou parece que só ${isMadruga ? "@madrugacontabilidade" : "o William"} poderia ter escrito?". Se a resposta for genérico, reescreva.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Retorne APENAS um JSON válido, sem markdown:
