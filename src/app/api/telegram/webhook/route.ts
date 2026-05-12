@@ -14,6 +14,7 @@ function escapeHtml(s: string) {
 }
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELEGRAM_BASE = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -55,7 +56,7 @@ async function getFileUrl(file_id: string): Promise<string | null> {
 
 // ─── Session helpers ─────────────────────────────────────────────────────────
 
-type SessionState = "idle" | "awaiting_type" | "awaiting_account" | "awaiting_date" | "awaiting_time" | "awaiting_prompt" | "awaiting_edit" | "awaiting_approval" | "awaiting_change_request";
+type SessionState = "idle" | "awaiting_type" | "awaiting_account" | "awaiting_date" | "awaiting_time" | "awaiting_prompt" | "awaiting_edit" | "awaiting_approval" | "awaiting_change_request" | "awaiting_idea_account" | "awaiting_idea_input";
 
 interface SessionData {
   tipo?: string;
@@ -376,6 +377,15 @@ export async function POST(req: NextRequest) {
         },
       });
 
+    } else if (action.startsWith("idea_account_")) {
+      const slug = action.replace("idea_account_", "");
+      await setSession(chat_id, "awaiting_idea_input", { slug });
+      const slugLabel = slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
+      await editMessage(chat_id, cq.message.message_id,
+        `💡 <b>Nova Ideia → ${slugLabel}</b>\n\nManda o link, áudio 🎙️ ou texto da ideia.\n\n<i>YouTube, Instagram, texto livre — qualquer formato vale!</i>`,
+        { reply_markup: { inline_keyboard: [] } }
+      );
+
     } else if (action.startsWith("account_")) {
       const slug = action.replace("account_", "");
       const newData = { ...data, slug };
@@ -431,6 +441,21 @@ export async function POST(req: NextRequest) {
 
   const { state, data } = await getSession(chat_id);
 
+  // ── /ideia command ──
+  if (text === "/ideia") {
+    await clearSession(chat_id);
+    await setSession(chat_id, "awaiting_idea_account", {});
+    await sendMessage(chat_id, "💡 <b>Nova Ideia</b>\n\nPara qual conta?", {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "👤 @williamnmadruga", callback_data: "idea_account_william" },
+          { text: "🏢 @madrugacontabilidade", callback_data: "idea_account_madruga" },
+        ]],
+      },
+    });
+    return new Response("ok");
+  }
+
   // ── /novo command ──
   if (text === "/novo" || text === "/criar" || text.toLowerCase() === "novo") {
     await clearSession(chat_id);
@@ -461,7 +486,8 @@ export async function POST(req: NextRequest) {
     await sendMessage(chat_id, `👋 <b>Bot de Conteúdo — Madruga</b>
 
 Comandos disponíveis:
-/novo — Criar novo conteúdo para o calendário
+/ideia — Salvar ideia rápida no rascunho (link, áudio ou texto)
+/novo — Criar conteúdo completo com data e roteiro
 /cancelar — Cancelar operação em andamento
 /meuid — Ver seu chat ID`);
     return new Response("ok");
@@ -570,9 +596,108 @@ Comandos disponíveis:
     return new Response("ok");
   }
 
+  // ── awaiting_idea_input — process the idea (link, audio, or text) ──
+  if (state === "awaiting_idea_input") {
+    let rawIdea = text;
+    let videoUrl = "";
+
+    // Detect URL in text
+    const urlMatch = text.match(/https?:\/\/\S+/);
+    if (urlMatch) {
+      videoUrl = urlMatch[0];
+      rawIdea = text.replace(urlMatch[0], "").trim();
+    }
+
+    // Handle voice/audio
+    const voice = msg.voice ?? msg.audio;
+    if (voice && !rawIdea && !videoUrl) {
+      await sendMessage(chat_id, "🎙️ Transcrevendo áudio...");
+      const fileUrl = await getFileUrl(voice.file_id);
+      if (fileUrl) {
+        const transcribed = await transcribeAudio(fileUrl);
+        if (transcribed) {
+          rawIdea = transcribed;
+          await sendMessage(chat_id, `📝 <i>Transcrição: "${transcribed.slice(0, 200)}${transcribed.length > 200 ? "..." : ""}"</i>`);
+        } else {
+          await sendMessage(chat_id, "❌ Não consegui transcrever o áudio. Tente texto ou link.");
+          return new Response("ok");
+        }
+      }
+    }
+
+    if (!rawIdea && !videoUrl) {
+      await sendMessage(chat_id, "Manda o link, áudio 🎙️ ou texto da ideia.");
+      return new Response("ok");
+    }
+
+    await sendMessage(chat_id, "✨ Formatando ideia com IA...");
+
+    // Call /api/ai/format-idea
+    const slug = data.slug ?? "william";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://madruga-dashboard.vercel.app";
+    let ideaResult: { titulo?: string; tipo?: string; prompt?: string; justificativa?: string; transcriptError?: string } = {};
+    try {
+      const res = await fetch(`${appUrl}/api/ai/format-idea`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawIdea, videoUrl, slug }),
+      });
+      ideaResult = await res.json();
+    } catch (e) {
+      await sendMessage(chat_id, `❌ Erro ao formatar ideia: ${e instanceof Error ? e.message : String(e)}`);
+      return new Response("ok");
+    }
+
+    if (!ideaResult.titulo) {
+      await sendMessage(chat_id, "❌ A IA não conseguiu formatar a ideia. Tente novamente com mais contexto.");
+      await clearSession(chat_id);
+      return new Response("ok");
+    }
+
+    // Save as rascunho in calendar_events
+    const sb = getSupabase();
+    const hoje = new Date().toISOString().slice(0, 10);
+    const eventId = `tg_idea_${Date.now()}`;
+    let saveError: string | null = null;
+
+    if (sb) {
+      const { error } = await sb.from("calendar_events").insert({
+        id: eventId,
+        slug,
+        titulo: ideaResult.titulo,
+        data: hoje,
+        tipo: ideaResult.tipo ?? "reel",
+        status: "rascunho",
+        copy: ideaResult.prompt ?? null,
+        legenda: ideaResult.justificativa ?? null,
+      });
+      if (error) saveError = error.message;
+    } else {
+      saveError = "Supabase não configurado";
+    }
+
+    await clearSession(chat_id);
+
+    if (saveError) {
+      await sendMessage(chat_id, `❌ Erro ao salvar rascunho: <code>${saveError}</code>`);
+      return new Response("ok");
+    }
+
+    const tipoEmoji = ideaResult.tipo === "reel" ? "🎬" : ideaResult.tipo === "carrossel" ? "🎠" : ideaResult.tipo === "story" ? "📸" : "📝";
+    const slugLabel = slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
+    const transcriptWarn = ideaResult.transcriptError ? `\n\n⚠️ <i>${ideaResult.transcriptError}</i>` : "";
+
+    await sendMessage(chat_id,
+      `✅ <b>Ideia salva no rascunho!</b>\n\n${tipoEmoji} <b>${ideaResult.titulo}</b>\n👤 ${slugLabel}\n\n📋 <i>${(ideaResult.justificativa ?? "").slice(0, 200)}</i>${transcriptWarn}\n\n<a href="${appUrl}/calendario">Abrir Calendário →</a>`,
+      { disable_web_page_preview: true }
+    );
+
+    return new Response("ok");
+  }
+
   // Fallback
   if (state === "idle") {
-    await sendMessage(chat_id, `Use /novo para criar um novo conteúdo para o calendário.`);
+    await sendMessage(chat_id, `Use /ideia para salvar uma ideia rápida ou /novo para criar conteúdo completo.`);
   }
 
   return new Response("ok");
