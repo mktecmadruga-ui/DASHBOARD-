@@ -106,6 +106,11 @@ function KanbanCardInner({ ev, statusDot, tipoOpts }: {
       </div>
       {ev.alteracoes && <p className="text-[9px] font-semibold text-red-500 mb-1">⚠️ Alterações</p>}
       <p className="font-medium text-text-dark leading-tight line-clamp-2 text-[11px]">{ev.titulo}</p>
+      {ev.status === "rascunho" && ev.prompt && (
+        <p className="mt-1 text-[10px] text-text-light leading-snug line-clamp-2 italic opacity-80">
+          {ev.prompt.replace(/^💡 Ideia original:\n/, "").slice(0, 90)}
+        </p>
+      )}
       <div className="flex items-center gap-1.5 mt-1.5">
         {ev.copy      && <Sparkles  className="w-3 h-3 text-slate-300"/>}
         {(ev.creatives?.length || ev.creative) && <ImageIcon className="w-3 h-3 text-slate-300"/>}
@@ -238,6 +243,7 @@ function usePersistedEvents(slug: string) {
             scheduledAt: (r.scheduled_at as string | null) ?? undefined,
             legenda:     (r.legenda as string | null) ?? undefined,
             copy:        (r.copy as string | null) ?? undefined,
+            prompt:      (r.prompt as string | null) ?? undefined,
             hashtags:    r.hashtags ? (r.hashtags as string).split(",").filter(Boolean) : undefined,
             creatives:   r.creatives_urls
               ? (r.creatives_urls as string).split("|").filter(Boolean).map((url: string) => ({ dataUrl: url, name: url.split("/").pop() ?? "criativo" }))
@@ -1104,14 +1110,15 @@ export default function ContentCalendar() {
             </p>
           </div>
 
-          {/* Prompt IA */}
+          {/* Prompt / Ideia original */}
           <div>
             <label className="text-xs font-medium text-text-medium block mb-1.5 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-primary"/> Prompt para IA
+              <Sparkles className="w-3.5 h-3.5 text-primary"/>
+              {prompt && selected?.status === "rascunho" ? "💡 Ideia original" : "Prompt para IA"}
             </label>
             <textarea value={prompt} onChange={e=>setPrompt(e.target.value)}
               placeholder="Descreva: tema, tom, público-alvo, referências..."
-              rows={3}
+              rows={prompt && selected?.status === "rascunho" ? 4 : 3}
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all resize-none placeholder:text-slate-300"/>
           </div>
 

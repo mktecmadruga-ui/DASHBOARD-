@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
     scheduled_at:    body.scheduledAt ?? null,
     legenda:         body.legenda ?? null,
     copy:            body.copy ?? null,
+    prompt:          body.prompt ?? null,
     hashtags:        Array.isArray(body.hashtags) ? body.hashtags.join(",") : (body.hashtags ?? null),
     creatives_urls:  creativesUrls.length ? creativesUrls.join("|") : null,
     alteracoes:      body.alteracoes ?? null,

@@ -387,6 +387,12 @@ RETORNE APENAS JSON VÁLIDO:
   const hoje = new Date().toISOString().slice(0, 10);
   let saveError: string | null = null;
 
+  // Build the original idea text to store as prompt
+  const originalPrompt = [
+    rawIdea ? `💡 Ideia original:\n${rawIdea}` : null,
+    extraContext ? `\n---\n${extraContext}` : null,
+  ].filter(Boolean).join("\n").trim() || null;
+
   if (sb) {
     const { error } = await sb.from("calendar_events").insert({
       id: `tg_idea_${Date.now()}`,
@@ -395,6 +401,7 @@ RETORNE APENAS JSON VÁLIDO:
       data: hoje,
       tipo: ideaResult.tipo ?? "reel",
       status: "rascunho",
+      prompt: originalPrompt,
       copy: ideaResult.prompt ?? null,
       legenda: ideaResult.justificativa ?? null,
     });

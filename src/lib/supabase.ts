@@ -33,7 +33,8 @@ export type DBCalendarEvent = {
   status: string;
   scheduled_at: string | null;
   legenda: string | null;
-  copy: string | null;           // roteiro/script
+  copy: string | null;           // roteiro/script gerado pela IA
+  prompt: string | null;         // ideia original do criador (input bruto)
   hashtags: string | null;       // comma-separated hashtags (without #)
   creatives_urls: string | null; // comma-separated image URLs
   alteracoes: string | null;     // change requests from William
