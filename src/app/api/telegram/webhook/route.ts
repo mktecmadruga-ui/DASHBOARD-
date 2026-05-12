@@ -56,7 +56,7 @@ async function getFileUrl(file_id: string): Promise<string | null> {
 
 // ─── Session helpers ─────────────────────────────────────────────────────────
 
-type SessionState = "idle" | "awaiting_type" | "awaiting_account" | "awaiting_date" | "awaiting_time" | "awaiting_prompt" | "awaiting_edit" | "awaiting_approval" | "awaiting_change_request" | "awaiting_idea_account" | "awaiting_idea_input";
+type SessionState = "idle" | "awaiting_type" | "awaiting_account" | "awaiting_date" | "awaiting_time" | "awaiting_prompt" | "awaiting_edit" | "awaiting_approval" | "awaiting_change_request" | "awaiting_idea_account" | "awaiting_idea_input" | "awaiting_idea_photos";
 
 interface SessionData {
   tipo?: string;
@@ -72,6 +72,9 @@ interface SessionData {
   // For review flow
   review_event_id?: string;
   review_titulo?: string;
+  // For /ideia photo collection
+  idea_photos?: string[];       // Telegram file_ids
+  idea_raw_text?: string;       // any text context sent alongside
 }
 
 async function getSession(chat_id: string): Promise<{ state: SessionState; data: SessionData }> {
@@ -162,6 +165,87 @@ async function transcribeAudio(fileUrl: string): Promise<string | null> {
   return data.text ?? null;
 }
 
+/** GPT-4o Vision on 1–N Telegram photo file_ids (screenshots, artes, carrossel) */
+async function analyzePhotos(fileIds: string[]): Promise<string> {
+  if (!OPENAI_KEY || !fileIds.length) return "";
+
+  // Resolve all file URLs from Telegram
+  const urls: string[] = [];
+  for (const fid of fileIds) {
+    const url = await getFileUrl(fid);
+    if (url) urls.push(url);
+  }
+  if (!urls.length) return "";
+
+  const isCarousel = urls.length > 1;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const content: any[] = [];
+
+  content.push({
+    type: "text",
+    text: isCarousel
+      ? `Analise estes ${urls.length} slides de um carrossel do Instagram para criação de conteúdo.
+Retorne JSON com:
+{
+  "slides": [
+    { "slide": 1, "textos": "todo texto visível", "descricao": "descrição visual", "tema": "mensagem do slide" }
+  ],
+  "tema_geral": "mensagem principal do carrossel completo",
+  "tipo_post": "carrossel"
+}`
+      : `Analise esta imagem de um post de Instagram para criação de conteúdo.
+Retorne JSON com:
+{
+  "textos": "todo texto visível na imagem, palavra por palavra",
+  "tema": "tema/mensagem principal que o post comunica",
+  "descricao": "descrição visual: layout, cores, pessoas, expressões, elementos gráficos",
+  "tipo_post": "arte_grafica | foto_pessoa | foto_produto | video_thumbnail | screenshot"
+}`,
+  });
+
+  for (const url of urls) {
+    content.push({ type: "image_url", image_url: { url, detail: "high" } });
+  }
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        max_tokens: isCarousel ? 1500 : 700,
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content }],
+      }),
+    });
+    if (!res.ok) return "";
+    const data = await res.json();
+    const raw = data.choices?.[0]?.message?.content ?? "{}";
+    const obj = JSON.parse(raw);
+
+    if (isCarousel && Array.isArray(obj.slides)) {
+      const parts = [`TIPO: carrossel (${obj.slides.length} slides)`];
+      if (obj.tema_geral) parts.push(`TEMA GERAL: ${obj.tema_geral}`);
+      for (const s of obj.slides) {
+        parts.push(`\nSLIDE ${s.slide}:`);
+        if (s.textos)   parts.push(`  Texto: ${s.textos}`);
+        if (s.tema)     parts.push(`  Mensagem: ${s.tema}`);
+        if (s.descricao) parts.push(`  Visual: ${s.descricao}`);
+      }
+      return parts.join("\n");
+    } else {
+      const parts: string[] = [];
+      if (obj.tipo_post) parts.push(`TIPO: ${obj.tipo_post}`);
+      if (obj.textos)    parts.push(`TEXTO VISÍVEL:\n${obj.textos}`);
+      if (obj.tema)      parts.push(`TEMA: ${obj.tema}`);
+      if (obj.descricao) parts.push(`VISUAL: ${obj.descricao}`);
+      return parts.join("\n");
+    }
+  } catch {
+    return "";
+  }
+}
+
 async function generateContent(tipo: string, slug: string, prompt: string): Promise<{ titulo: string; copy: string; legenda: string; hashtags: string[] } | null> {
   if (!OPENAI_KEY) return null;
 
@@ -212,6 +296,126 @@ Regras para hashtags: entre 5 e 8, sem o símbolo #, mix de específicas e ampla
   } catch {
     return null;
   }
+}
+
+// ─── /ideia: format with AI and save as rascunho ────────────────────────────
+
+async function processIdeaAndSave(opts: {
+  chat_id: string;
+  slug: string;
+  appUrl: string;
+  rawIdea: string;
+  extraContext: string;
+  transcriptWarn: string;
+}): Promise<void> {
+  const { chat_id, slug, appUrl, rawIdea, extraContext, transcriptWarn } = opts;
+
+  if (!OPENAI_KEY) {
+    await sendMessage(chat_id, "❌ OPENAI_API_KEY não configurada.");
+    return;
+  }
+
+  const isWilliam = slug !== "madruga";
+  const accountVoice = isWilliam
+    ? `William Madruga — contador, advogado e palestrante (perfil pessoal @williamnmadruga).
+Voz: direta, posicionada, profissional + humana. Fala em 1ª pessoa. Traduz técnico em impacto prático.
+Público: empresários, MEI, donos de PMEs.`
+    : `Madruga Contabilidade — escritório contábil que atende +1000 empresas (@madrugacontabilidade).
+Voz: leve, acessível, próxima. Fala COM o empresário, não PARA.
+Público: empresários de todos os portes no Sul do Brasil.`;
+
+  const contextParts: string[] = [];
+  if (rawIdea)      contextParts.push(`IDEIA/CONTEXTO DO CRIADOR:\n${rawIdea}`);
+  if (extraContext) contextParts.push(extraContext);
+
+  let ideaResult: { titulo?: string; tipo?: string; prompt?: string; justificativa?: string } = {};
+  try {
+    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.8,
+        max_tokens: 1200,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `Você é o assistente criativo de Instagram de: ${accountVoice}
+
+Analise TODO o material recebido (transcrição, texto visível em artes, descrição visual, caption, áudio) e transforme em um briefing completo de produção.
+
+FORMATOS: reel | carrossel | story | feed
+
+RETORNE APENAS JSON VÁLIDO:
+{
+  "titulo": "título interno chamativo que resume o conteúdo (máx 70 chars)",
+  "tipo": "reel" | "carrossel" | "story" | "feed",
+  "prompt": "BRIEFING COMPLETO DE PRODUÇÃO com: (1) tema central e insight principal extraído do material, (2) gancho viral para os 3 primeiros segundos, (3) estrutura cena a cena para reel OU slide a slide para carrossel com timecodes/numeração, (4) tom emocional e linguagem, (5) CTA final. Mínimo 150 palavras. Use o conteúdo real analisado, não invente.",
+  "justificativa": "por que esse formato e ângulo vão performar — cite elementos específicos do material analisado (1-2 frases)"
+}`,
+          },
+          {
+            role: "user",
+            content: contextParts.join("\n\n") || "Sem material enviado.",
+          },
+        ],
+      }),
+    });
+
+    if (!aiRes.ok) {
+      const errText = await aiRes.text();
+      throw new Error(`OpenAI ${aiRes.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const aiData = await aiRes.json();
+    const raw = aiData.choices?.[0]?.message?.content ?? "{}";
+    try { ideaResult = JSON.parse(raw); }
+    catch { const m = raw.match(/\{[\s\S]*\}/); ideaResult = m ? JSON.parse(m[0]) : {}; }
+  } catch (e) {
+    await sendMessage(chat_id, `❌ Erro na IA: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+
+  if (!ideaResult.titulo) {
+    await sendMessage(chat_id, "❌ A IA não retornou um briefing válido. Tente novamente com mais detalhes.");
+    return;
+  }
+
+  // Save rascunho
+  const sb = getSupabase();
+  const hoje = new Date().toISOString().slice(0, 10);
+  let saveError: string | null = null;
+
+  if (sb) {
+    const { error } = await sb.from("calendar_events").insert({
+      id: `tg_idea_${Date.now()}`,
+      slug,
+      titulo: ideaResult.titulo,
+      data: hoje,
+      tipo: ideaResult.tipo ?? "reel",
+      status: "rascunho",
+      copy: ideaResult.prompt ?? null,
+      legenda: ideaResult.justificativa ?? null,
+    });
+    if (error) saveError = error.message;
+  } else {
+    saveError = "Supabase não configurado";
+  }
+
+  if (saveError) {
+    await sendMessage(chat_id, `❌ Erro ao salvar rascunho: <code>${saveError}</code>`);
+    return;
+  }
+
+  const tipoEmoji = ideaResult.tipo === "reel" ? "🎬" : ideaResult.tipo === "carrossel" ? "🎠" : ideaResult.tipo === "story" ? "📸" : "📝";
+  const slugLabel = slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
+  const warnLine  = transcriptWarn ? `\n\n⚠️ <i>${transcriptWarn}</i>` : "";
+
+  await sendMessage(chat_id,
+    `✅ <b>Ideia salva no rascunho!</b>\n\n${tipoEmoji} <b>${ideaResult.titulo}</b>\n👤 ${slugLabel}\n\n📋 <i>${(ideaResult.justificativa ?? "").slice(0, 250)}</i>${warnLine}\n\n<a href="${appUrl}/calendario">Abrir Calendário →</a>`,
+    { disable_web_page_preview: true }
+  );
 }
 
 // ─── Preview messages ─────────────────────────────────────────────────────────
@@ -596,10 +800,67 @@ Comandos disponíveis:
     return new Response("ok");
   }
 
+  // ── awaiting_idea_photos — collecting carousel/creative screenshots ──────────
+  if (state === "awaiting_idea_photos") {
+    const photo = msg.photo;
+
+    if (photo) {
+      // Add highest-res version of this photo to the accumulated list
+      const best = photo[photo.length - 1];
+      const existing = data.idea_photos ?? [];
+      const updated = [...existing, best.file_id];
+      await setSession(chat_id, "awaiting_idea_photos", { ...data, idea_photos: updated });
+      await sendMessage(chat_id,
+        `📸 Foto ${updated.length} recebida!\n\nMande mais slides ou envie /analisar para processar${updated.length === 1 ? " (ou qualquer texto com contexto adicional)" : "."}`
+      );
+      return new Response("ok");
+    }
+
+    // /analisar or any text triggers processing
+    const photos = data.idea_photos ?? [];
+    if (!photos.length) {
+      await sendMessage(chat_id, "Nenhuma foto recebida. Mande as imagens primeiro.");
+      return new Response("ok");
+    }
+
+    const slugP = data.slug ?? "william";
+    const appUrlP = process.env.NEXT_PUBLIC_APP_URL ?? "https://madruga-dashboard.vercel.app";
+    const extraTextP = text !== "/analisar" ? text : (data.idea_raw_text ?? "");
+
+    await sendMessage(chat_id, `🖼️ Analisando ${photos.length > 1 ? `${photos.length} imagens` : "imagem"} com GPT-4o Vision...`);
+    const visionResult = await analyzePhotos(photos);
+
+    if (!visionResult) {
+      await sendMessage(chat_id, "❌ Não consegui analisar as imagens. Tente de novo ou mande o texto da ideia.");
+      await clearSession(chat_id);
+      return new Response("ok");
+    }
+
+    await sendMessage(chat_id, "✨ Formatando briefing...");
+    await processIdeaAndSave({ chat_id, slug: slugP, appUrl: appUrlP, rawIdea: extraTextP, extraContext: `--- ANÁLISE VISUAL DOS CRIATIVOS ---\n${visionResult}`, transcriptWarn: "" });
+    await clearSession(chat_id);
+    return new Response("ok");
+  }
+
   // ── awaiting_idea_input — process the idea (link, audio, or text) ──
   if (state === "awaiting_idea_input") {
     const slug = data.slug ?? "william";
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://madruga-dashboard.vercel.app";
+
+    // ── Photo(s) sent directly — switch to photo collection mode ─────────────
+    const incomingPhoto = msg.photo;
+    if (incomingPhoto) {
+      const best = incomingPhoto[incomingPhoto.length - 1];
+      await setSession(chat_id, "awaiting_idea_photos", {
+        ...data,
+        idea_photos: [best.file_id],
+        idea_raw_text: text || undefined,
+      });
+      await sendMessage(chat_id,
+        `📸 Foto 1 recebida!\n\nSe for um carrossel, mande os outros slides.\nQuando terminar, mande /analisar ou escreva contexto adicional.`
+      );
+      return new Response("ok");
+    }
 
     let rawIdea = text;
     let extraContext = "";        // extra info from URL/audio beyond raw text
@@ -773,130 +1034,13 @@ Retorne JSON com:
     }
 
     if (!rawIdea && !extraContext) {
-      await sendMessage(chat_id, "Manda o link, áudio 🎙️ ou texto da ideia.");
+      await sendMessage(chat_id, "Manda o link, áudio 🎙️, foto ou texto da ideia.");
       return new Response("ok");
     }
 
     await sendMessage(chat_id, "✨ Formatando ideia com IA...");
-
-    // ── 3. Call OpenAI directly — no HTTP roundtrip to own API ────────────────
-    if (!OPENAI_KEY) {
-      await sendMessage(chat_id, "❌ OPENAI_API_KEY não configurada.");
-      return new Response("ok");
-    }
-
-    const isWilliam = slug !== "madruga";
-    const accountVoice = isWilliam
-      ? `William Madruga — contador, advogado e palestrante (perfil pessoal @williamnmadruga).
-Voz: direta, posicionada, profissional + humana. Fala em 1ª pessoa. Traduz técnico em impacto prático.
-Público: empresários, MEI, donos de PMEs.`
-      : `Madruga Contabilidade — escritório contábil que atende +1000 empresas (@madrugacontabilidade).
-Voz: leve, acessível, próxima. Fala COM o empresário, não PARA.
-Público: empresários de todos os portes no Sul do Brasil.`;
-
-    const contextParts: string[] = [];
-    if (rawIdea)      contextParts.push(`IDEIA/CONTEXTO DO CRIADOR:\n${rawIdea}`);
-    if (extraContext) contextParts.push(extraContext);
-
-    let ideaResult: { titulo?: string; tipo?: string; prompt?: string; justificativa?: string } = {};
-    try {
-      const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          temperature: 0.8,
-          max_tokens: 1200,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content: `Você é o assistente criativo de Instagram de: ${accountVoice}
-
-Analise TODO o material recebido (transcrição, texto visível em artes, descrição visual, caption, áudio) e transforme em um briefing completo de produção.
-
-FORMATOS: reel | carrossel | story | feed
-
-RETORNE APENAS JSON VÁLIDO:
-{
-  "titulo": "título interno chamativo que resume o conteúdo (máx 70 chars)",
-  "tipo": "reel" | "carrossel" | "story" | "feed",
-  "prompt": "BRIEFING COMPLETO DE PRODUÇÃO com: (1) tema central e insight principal extraído do material, (2) gancho viral para os 3 primeiros segundos, (3) estrutura cena a cena para reel OU slide a slide para carrossel com timecodes/numeração, (4) tom emocional e linguagem, (5) CTA final. Mínimo 150 palavras. Use o conteúdo real analisado, não invente.",
-  "justificativa": "por que esse formato e ângulo vão performar — cite elementos específicos do material analisado (1-2 frases)"
-}`,
-            },
-            {
-              role: "user",
-              content: contextParts.join("\n\n") || "Sem material enviado.",
-            },
-          ],
-        }),
-      });
-
-      if (!aiRes.ok) {
-        const errText = await aiRes.text();
-        throw new Error(`OpenAI ${aiRes.status}: ${errText.slice(0, 200)}`);
-      }
-
-      const aiData = await aiRes.json();
-      const raw = aiData.choices?.[0]?.message?.content ?? "{}";
-      try {
-        ideaResult = JSON.parse(raw);
-      } catch {
-        // Try to extract JSON from response
-        const match = raw.match(/\{[\s\S]*\}/);
-        ideaResult = match ? JSON.parse(match[0]) : {};
-      }
-    } catch (e) {
-      await sendMessage(chat_id, `❌ Erro na IA: ${e instanceof Error ? e.message : String(e)}`);
-      await clearSession(chat_id);
-      return new Response("ok");
-    }
-
-    if (!ideaResult.titulo) {
-      await sendMessage(chat_id, "❌ A IA não retornou um briefing válido. Tente novamente com mais detalhes.");
-      await clearSession(chat_id);
-      return new Response("ok");
-    }
-
-    // ── 4. Save as rascunho ───────────────────────────────────────────────────
-    const sb = getSupabase();
-    const hoje = new Date().toISOString().slice(0, 10);
-    const eventId = `tg_idea_${Date.now()}`;
-    let saveError: string | null = null;
-
-    if (sb) {
-      const { error } = await sb.from("calendar_events").insert({
-        id: eventId,
-        slug,
-        titulo: ideaResult.titulo,
-        data: hoje,
-        tipo: ideaResult.tipo ?? "reel",
-        status: "rascunho",
-        copy: ideaResult.prompt ?? null,
-        legenda: ideaResult.justificativa ?? null,
-      });
-      if (error) saveError = error.message;
-    } else {
-      saveError = "Supabase não configurado";
-    }
-
+    await processIdeaAndSave({ chat_id, slug, appUrl, rawIdea, extraContext, transcriptWarn });
     await clearSession(chat_id);
-
-    if (saveError) {
-      await sendMessage(chat_id, `❌ Erro ao salvar rascunho: <code>${saveError}</code>`);
-      return new Response("ok");
-    }
-
-    const tipoEmoji = ideaResult.tipo === "reel" ? "🎬" : ideaResult.tipo === "carrossel" ? "🎠" : ideaResult.tipo === "story" ? "📸" : "📝";
-    const slugLabel = slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
-    const warnLine = transcriptWarn ? `\n\n⚠️ <i>${transcriptWarn}</i>` : "";
-
-    await sendMessage(chat_id,
-      `✅ <b>Ideia salva no rascunho!</b>\n\n${tipoEmoji} <b>${ideaResult.titulo}</b>\n👤 ${slugLabel}\n\n📋 <i>${(ideaResult.justificativa ?? "").slice(0, 250)}</i>${warnLine}\n\n<a href="${appUrl}/calendario">Abrir Calendário →</a>`,
-      { disable_web_page_preview: true }
-    );
-
     return new Response("ok");
   }
 
