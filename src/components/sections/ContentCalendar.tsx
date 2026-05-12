@@ -10,7 +10,7 @@ import {
   ChevronLeft, ChevronRight, Sparkles, Loader2,
   Copy, Check, Hash, AlignLeft, FileText, Globe,
   Upload, X as XIcon, Image as ImageIcon, Clock, Send,
-  CheckCircle2, AlertCircle, CalendarDays, Kanban,
+  CheckCircle2, AlertCircle, Kanban,
 } from "lucide-react";
 import type { CalendarEvent } from "@/types";
 import { createBrowserClient } from "@supabase/ssr";
@@ -695,8 +695,7 @@ export default function ContentCalendar() {
   const startLabel = `${days[0].getDate()} ${MONTHS[days[0].getMonth()]}`;
   const endLabel   = `${days[6].getDate()} ${MONTHS[days[6].getMonth()]} ${days[6].getFullYear()}`;
 
-  // View toggle
-  const [view, setView] = useState<"calendar" | "kanban">("calendar");
+  // (view toggle removed — calendar and kanban are always shown stacked)
 
   // Drag-and-drop (kanban) — via @dnd-kit/core
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -734,37 +733,18 @@ export default function ContentCalendar() {
             <p className="text-sm text-text-light mt-0.5">{startLabel} – {endLabel}</p>
           </div>
           <div className="flex items-center gap-2">
-            {/* View toggle */}
+            <button type="button" onClick={goToday}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 text-text-medium hover:bg-slate-50 cursor-pointer transition-colors">
+              Hoje
+            </button>
             <div className="flex border border-slate-200 rounded-xl overflow-hidden">
-              <button type="button" onClick={() => setView("calendar")}
-                className={cn("px-3 py-1.5 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium",
-                  view === "calendar" ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-text-medium")}>
-                <CalendarDays className="w-3.5 h-3.5"/>
-                Calendário
+              <button type="button" onClick={prevWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors">
+                <ChevronLeft className="w-4 h-4 text-text-medium"/>
               </button>
-              <button type="button" onClick={() => setView("kanban")}
-                className={cn("px-3 py-1.5 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium border-l border-slate-200",
-                  view === "kanban" ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-text-medium")}>
-                <Kanban className="w-3.5 h-3.5"/>
-                Kanban
+              <button type="button" onClick={nextWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors border-l border-slate-200">
+                <ChevronRight className="w-4 h-4 text-text-medium"/>
               </button>
             </div>
-            {view === "calendar" && (
-              <>
-                <button type="button" onClick={goToday}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 text-text-medium hover:bg-slate-50 cursor-pointer transition-colors">
-                  Hoje
-                </button>
-                <div className="flex border border-slate-200 rounded-xl overflow-hidden">
-                  <button type="button" onClick={prevWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors">
-                    <ChevronLeft className="w-4 h-4 text-text-medium"/>
-                  </button>
-                  <button type="button" onClick={nextWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors border-l border-slate-200">
-                    <ChevronRight className="w-4 h-4 text-text-medium"/>
-                  </button>
-                </div>
-              </>
-            )}
             <button type="button" onClick={()=>openNew()}
               className="px-3 py-1.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity">
               + Adicionar
@@ -791,35 +771,8 @@ export default function ContentCalendar() {
           )}
         </AnimatePresence>
 
-        {/* Kanban board */}
-        {view === "kanban" && (
-          <DndContext
-            sensors={dndSensors}
-            collisionDetection={closestCorners}
-            onDragStart={onDndDragStart}
-            onDragEnd={onDndDragEnd}>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-              {kanbanCols.map(col => (
-                <KanbanColumn
-                  key={col.status}
-                  col={col}
-                  events={events.filter(e => e.status === col.status)}
-                  statusDot={statusDot}
-                  tipoOpts={tipoOpts}
-                  onCardClick={openEdit}
-                />
-              ))}
-            </div>
-            <DragOverlay dropAnimation={null}>
-              {activeDragId ? (
-                <KanbanCardGhost ev={events.find(e => e.id === activeDragId)!} statusDot={statusDot} tipoOpts={tipoOpts}/>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        )}
-
         {/* Week grid */}
-        {view === "calendar" && (<div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-2">
           {days.map(day => {
             const dateStr   = toStr(day);
             const dayEvents = events.filter(e => e.data === dateStr);
@@ -872,7 +825,7 @@ export default function ContentCalendar() {
               </div>
             );
           })}
-        </div>)}
+        </div>
 
         {/* Legend */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 pt-4 border-t border-slate-50">
@@ -894,6 +847,38 @@ export default function ContentCalendar() {
               <span className="text-xs text-text-light">Auto-post</span>
             </div>
           </div>
+        </div>
+
+        {/* ── Kanban section ─────────────────────────────────────────────── */}
+        <div className="mt-6 pt-6 border-t border-slate-100">
+          <div className="flex items-center gap-2 mb-4">
+            <Kanban className="w-4 h-4 text-primary"/>
+            <h4 className="text-sm font-semibold text-text-dark">Kanban</h4>
+            <span className="text-xs text-text-light">— arraste os cards para mudar o status</span>
+          </div>
+          <DndContext
+            sensors={dndSensors}
+            collisionDetection={closestCorners}
+            onDragStart={onDndDragStart}
+            onDragEnd={onDndDragEnd}>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {kanbanCols.map(col => (
+                <KanbanColumn
+                  key={col.status}
+                  col={col}
+                  events={events.filter(e => e.status === col.status)}
+                  statusDot={statusDot}
+                  tipoOpts={tipoOpts}
+                  onCardClick={openEdit}
+                />
+              ))}
+            </div>
+            <DragOverlay dropAnimation={null}>
+              {activeDragId ? (
+                <KanbanCardGhost ev={events.find(e => e.id === activeDragId)!} statusDot={statusDot} tipoOpts={tipoOpts}/>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         </div>
       </Card>
 
