@@ -96,15 +96,22 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Leads link — separado */}
-      <div className="px-4 pb-2">
+      {/* Páginas dedicadas */}
+      <div className="px-4 pb-1 border-t border-white/10 pt-3 flex flex-col gap-0.5">
+        <Link
+          href="/calendario"
+          className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all duration-150 w-full"
+        >
+          <Calendar className="w-4 h-4 flex-shrink-0" />
+          <span>Calendário</span>
+          <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded-md font-semibold">FULL</span>
+        </Link>
         <Link
           href="/leads"
           className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all duration-150 w-full"
         >
           <UserCheck className="w-4 h-4 flex-shrink-0" />
           <span>Leads</span>
-          <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded-md font-semibold">NEW</span>
         </Link>
       </div>
 
