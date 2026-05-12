@@ -598,19 +598,16 @@ Comandos disponíveis:
 
   // ── awaiting_idea_input — process the idea (link, audio, or text) ──
   if (state === "awaiting_idea_input") {
+    const slug = data.slug ?? "william";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://madruga-dashboard.vercel.app";
+
     let rawIdea = text;
-    let videoUrl = "";
+    let extraContext = "";        // extra info from URL/audio beyond raw text
+    let transcriptWarn = "";
 
-    // Detect URL in text
-    const urlMatch = text.match(/https?:\/\/\S+/);
-    if (urlMatch) {
-      videoUrl = urlMatch[0];
-      rawIdea = text.replace(urlMatch[0], "").trim();
-    }
-
-    // Handle voice/audio
+    // ── 1. Voice/audio message ─────────────────────────────────────────────────
     const voice = msg.voice ?? msg.audio;
-    if (voice && !rawIdea && !videoUrl) {
+    if (voice) {
       await sendMessage(chat_id, "🎙️ Transcrevendo áudio...");
       const fileUrl = await getFileUrl(voice.file_id);
       if (fileUrl) {
@@ -625,36 +622,142 @@ Comandos disponíveis:
       }
     }
 
-    if (!rawIdea && !videoUrl) {
+    // ── 2. URL in text — fetch meta/transcript in background ──────────────────
+    const urlMatch = text.match(/https?:\/\/\S+/);
+    if (urlMatch) {
+      const videoUrl = urlMatch[0];
+      rawIdea = text.replace(urlMatch[0], "").trim();
+
+      await sendMessage(chat_id, "🔗 Buscando conteúdo do link...");
+
+      // YouTube: grab transcript
+      const ytMatch = videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (ytMatch) {
+        try {
+          const { YoutubeTranscript } = await import("youtube-transcript");
+          const segs = await YoutubeTranscript.fetchTranscript(ytMatch[1], { lang: "pt" })
+            .catch(() => YoutubeTranscript.fetchTranscript(ytMatch[1], { lang: "en" }))
+            .catch(() => YoutubeTranscript.fetchTranscript(ytMatch[1]));
+          if (segs?.length) {
+            const transcript = segs.map(s => s.text).join(" ").replace(/\s+/g, " ").trim().slice(0, 4000);
+            extraContext = `TRANSCRIÇÃO DO VÍDEO:\n${transcript}`;
+          }
+        } catch {
+          transcriptWarn = "Legendas não disponíveis no YouTube — formatado com o título/texto.";
+        }
+      } else {
+        // Generic URL: fetch meta tags
+        try {
+          const pageRes = await fetch(videoUrl, {
+            headers: { "User-Agent": "facebookexternalhit/1.1", "Accept": "text/html,*/*;q=0.8" },
+            redirect: "follow",
+          });
+          if (pageRes.ok) {
+            const html = await pageRes.text();
+            const getMeta = (prop: string) => {
+              return html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i"))?.[1]
+                ?? html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${prop}["']`, "i"))?.[1]
+                ?? "";
+            };
+            const title = getMeta("og:title") || getMeta("twitter:title");
+            const desc  = getMeta("og:description") || getMeta("twitter:description");
+            const site  = getMeta("og:site_name");
+            const parts = [];
+            if (site)  parts.push(`PLATAFORMA: ${site}`);
+            if (title) parts.push(`TÍTULO: ${title}`);
+            if (desc)  parts.push(`DESCRIÇÃO: ${desc}`);
+            if (parts.length) extraContext = parts.join("\n");
+          }
+        } catch {
+          transcriptWarn = "Não consegui acessar o link — formatado com o texto disponível.";
+        }
+      }
+    }
+
+    if (!rawIdea && !extraContext) {
       await sendMessage(chat_id, "Manda o link, áudio 🎙️ ou texto da ideia.");
       return new Response("ok");
     }
 
     await sendMessage(chat_id, "✨ Formatando ideia com IA...");
 
-    // Call /api/ai/format-idea
-    const slug = data.slug ?? "william";
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://madruga-dashboard.vercel.app";
-    let ideaResult: { titulo?: string; tipo?: string; prompt?: string; justificativa?: string; transcriptError?: string } = {};
-    try {
-      const res = await fetch(`${appUrl}/api/ai/format-idea`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawIdea, videoUrl, slug }),
-      });
-      ideaResult = await res.json();
-    } catch (e) {
-      await sendMessage(chat_id, `❌ Erro ao formatar ideia: ${e instanceof Error ? e.message : String(e)}`);
+    // ── 3. Call OpenAI directly — no HTTP roundtrip to own API ────────────────
+    if (!OPENAI_KEY) {
+      await sendMessage(chat_id, "❌ OPENAI_API_KEY não configurada.");
       return new Response("ok");
     }
 
-    if (!ideaResult.titulo) {
-      await sendMessage(chat_id, "❌ A IA não conseguiu formatar a ideia. Tente novamente com mais contexto.");
+    const isWilliam = slug !== "madruga";
+    const accountVoice = isWilliam
+      ? "William Madruga — contador, advogado e palestrante. Fala em 1ª pessoa, tom direto e especialista."
+      : "Madruga Contabilidade — escritório contábil. Tom leve e acessível para empresários de PMEs.";
+
+    const contextParts: string[] = [];
+    if (rawIdea)    contextParts.push(`IDEIA:\n${rawIdea}`);
+    if (extraContext) contextParts.push(extraContext);
+
+    let ideaResult: { titulo?: string; tipo?: string; prompt?: string; justificativa?: string } = {};
+    try {
+      const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0.8,
+          max_tokens: 900,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: `Você é o assistente criativo do perfil do Instagram: ${accountVoice}
+
+Transforme o material recebido em um briefing estruturado de conteúdo para Instagram.
+
+FORMATOS DISPONÍVEIS: reel | carrossel | story | feed
+
+RETORNE APENAS JSON VÁLIDO:
+{
+  "titulo": "título interno curto e chamativo (máx 70 chars)",
+  "tipo": "reel" | "carrossel" | "story" | "feed",
+  "prompt": "briefing completo: tema central, insight principal, gancho viral, estrutura sugerida (para reel: cenas com timecodes), tom, CTA — mínimo 120 palavras",
+  "justificativa": "por que esse formato e ângulo vão performar bem (1-2 frases)"
+}`,
+            },
+            {
+              role: "user",
+              content: contextParts.join("\n\n") || "Sem material — crie um briefing genérico.",
+            },
+          ],
+        }),
+      });
+
+      if (!aiRes.ok) {
+        const errText = await aiRes.text();
+        throw new Error(`OpenAI ${aiRes.status}: ${errText.slice(0, 200)}`);
+      }
+
+      const aiData = await aiRes.json();
+      const raw = aiData.choices?.[0]?.message?.content ?? "{}";
+      try {
+        ideaResult = JSON.parse(raw);
+      } catch {
+        // Try to extract JSON from response
+        const match = raw.match(/\{[\s\S]*\}/);
+        ideaResult = match ? JSON.parse(match[0]) : {};
+      }
+    } catch (e) {
+      await sendMessage(chat_id, `❌ Erro na IA: ${e instanceof Error ? e.message : String(e)}`);
       await clearSession(chat_id);
       return new Response("ok");
     }
 
-    // Save as rascunho in calendar_events
+    if (!ideaResult.titulo) {
+      await sendMessage(chat_id, "❌ A IA não retornou um briefing válido. Tente novamente com mais detalhes.");
+      await clearSession(chat_id);
+      return new Response("ok");
+    }
+
+    // ── 4. Save as rascunho ───────────────────────────────────────────────────
     const sb = getSupabase();
     const hoje = new Date().toISOString().slice(0, 10);
     const eventId = `tg_idea_${Date.now()}`;
@@ -685,10 +788,10 @@ Comandos disponíveis:
 
     const tipoEmoji = ideaResult.tipo === "reel" ? "🎬" : ideaResult.tipo === "carrossel" ? "🎠" : ideaResult.tipo === "story" ? "📸" : "📝";
     const slugLabel = slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
-    const transcriptWarn = ideaResult.transcriptError ? `\n\n⚠️ <i>${ideaResult.transcriptError}</i>` : "";
+    const warnLine = transcriptWarn ? `\n\n⚠️ <i>${transcriptWarn}</i>` : "";
 
     await sendMessage(chat_id,
-      `✅ <b>Ideia salva no rascunho!</b>\n\n${tipoEmoji} <b>${ideaResult.titulo}</b>\n👤 ${slugLabel}\n\n📋 <i>${(ideaResult.justificativa ?? "").slice(0, 200)}</i>${transcriptWarn}\n\n<a href="${appUrl}/calendario">Abrir Calendário →</a>`,
+      `✅ <b>Ideia salva no rascunho!</b>\n\n${tipoEmoji} <b>${ideaResult.titulo}</b>\n👤 ${slugLabel}\n\n📋 <i>${(ideaResult.justificativa ?? "").slice(0, 250)}</i>${warnLine}\n\n<a href="${appUrl}/calendario">Abrir Calendário →</a>`,
       { disable_web_page_preview: true }
     );
 
