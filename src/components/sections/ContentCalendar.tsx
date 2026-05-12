@@ -472,7 +472,8 @@ export default function ContentCalendar() {
   const [ideaLoading,    setIdeaLoading]    = useState(false);
   const [ideaError,      setIdeaError]      = useState("");
   const [ideaResult,     setIdeaResult]     = useState<{
-    titulo: string; tipo: string; prompt: string; justificativa: string; transcript?: string; transcriptError?: string;
+    titulo: string; tipo: string; prompt: string; justificativa: string;
+    transcript?: string; imageDesc?: string; transcriptError?: string;
   } | null>(null);
 
   function openIdeaModal() {
@@ -961,7 +962,7 @@ export default function ContentCalendar() {
           {/* URL do vídeo */}
           <div>
             <label className="text-xs font-medium text-text-medium block mb-1.5">
-              URL do vídeo YouTube <span className="text-slate-400 font-normal">(opcional — a IA transcreve e usa como base)</span>
+              URL do conteúdo <span className="text-slate-400 font-normal">(YouTube, Instagram, qualquer link — IA lê e analisa)</span>
             </label>
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-text-light flex-shrink-0"/>
@@ -998,8 +999,14 @@ export default function ContentCalendar() {
               )}
               {ideaResult.transcript && (
                 <details className="cursor-pointer">
-                  <summary className="text-[11px] text-text-light hover:text-text-medium transition-colors">Ver transcrição usada</summary>
+                  <summary className="text-[11px] text-text-light hover:text-text-medium transition-colors">Ver texto extraído do link</summary>
                   <p className="mt-1.5 text-[10px] text-text-light leading-relaxed max-h-28 overflow-y-auto">{ideaResult.transcript}</p>
+                </details>
+              )}
+              {ideaResult.imageDesc && (
+                <details className="cursor-pointer">
+                  <summary className="text-[11px] text-text-light hover:text-text-medium transition-colors">Ver análise visual da imagem</summary>
+                  <p className="mt-1.5 text-[10px] text-text-light leading-relaxed max-h-28 overflow-y-auto">{ideaResult.imageDesc}</p>
                 </details>
               )}
             </div>
