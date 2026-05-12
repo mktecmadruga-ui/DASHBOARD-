@@ -622,16 +622,16 @@ Comandos disponíveis:
       }
     }
 
-    // ── 2. URL in text — fetch meta/transcript in background ──────────────────
+    // ── 2. URL in text — full extraction: transcript + vision + meta ──────────
     const urlMatch = text.match(/https?:\/\/\S+/);
     if (urlMatch) {
-      const videoUrl = urlMatch[0];
+      const pageUrl = urlMatch[0];
       rawIdea = text.replace(urlMatch[0], "").trim();
 
-      await sendMessage(chat_id, "🔗 Buscando conteúdo do link...");
+      await sendMessage(chat_id, "🔍 Analisando conteúdo do link...");
 
-      // YouTube: grab transcript
-      const ytMatch = videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      // ── YouTube: closed captions via YoutubeTranscript ──────────────────────
+      const ytMatch = pageUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
       if (ytMatch) {
         try {
           const { YoutubeTranscript } = await import("youtube-transcript");
@@ -639,38 +639,136 @@ Comandos disponíveis:
             .catch(() => YoutubeTranscript.fetchTranscript(ytMatch[1], { lang: "en" }))
             .catch(() => YoutubeTranscript.fetchTranscript(ytMatch[1]));
           if (segs?.length) {
-            const transcript = segs.map(s => s.text).join(" ").replace(/\s+/g, " ").trim().slice(0, 4000);
-            extraContext = `TRANSCRIÇÃO DO VÍDEO:\n${transcript}`;
+            const transcript = segs.map(s => s.text).join(" ").replace(/\s+/g, " ").trim().slice(0, 4500);
+            extraContext = `TRANSCRIÇÃO COMPLETA DO VÍDEO:\n${transcript}`;
+          } else {
+            transcriptWarn = "Legendas não disponíveis no YouTube.";
           }
         } catch {
-          transcriptWarn = "Legendas não disponíveis no YouTube — formatado com o título/texto.";
+          transcriptWarn = "Legendas não disponíveis no YouTube.";
         }
+
       } else {
-        // Generic URL: fetch meta tags
+        // ── Instagram / generic URL: meta + vision + audio ──────────────────
+        let html = "";
+        let imageUrl = "";
+        let ogVideoUrl = "";
+        const metaParts: string[] = [];
+
+        // Step A: fetch page meta
         try {
-          const pageRes = await fetch(videoUrl, {
-            headers: { "User-Agent": "facebookexternalhit/1.1", "Accept": "text/html,*/*;q=0.8" },
+          const pageRes = await fetch(pageUrl, {
+            headers: {
+              "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+              "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+            },
             redirect: "follow",
           });
           if (pageRes.ok) {
-            const html = await pageRes.text();
-            const getMeta = (prop: string) => {
-              return html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i"))?.[1]
-                ?? html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${prop}["']`, "i"))?.[1]
-                ?? "";
-            };
-            const title = getMeta("og:title") || getMeta("twitter:title");
-            const desc  = getMeta("og:description") || getMeta("twitter:description");
-            const site  = getMeta("og:site_name");
-            const parts = [];
-            if (site)  parts.push(`PLATAFORMA: ${site}`);
-            if (title) parts.push(`TÍTULO: ${title}`);
-            if (desc)  parts.push(`DESCRIÇÃO: ${desc}`);
-            if (parts.length) extraContext = parts.join("\n");
+            html = await pageRes.text();
+            const getMeta = (prop: string) =>
+              html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i"))?.[1]
+              ?? html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${prop}["']`, "i"))?.[1]
+              ?? html.match(new RegExp(`<meta[^>]+name=["']${prop.replace("og:", "")}["'][^>]+content=["']([^"']+)["']`, "i"))?.[1]
+              ?? "";
+            const decode = (s: string) => s.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+            const site  = decode(getMeta("og:site_name"));
+            const title = decode(getMeta("og:title") || getMeta("twitter:title"));
+            const desc  = decode(getMeta("og:description") || getMeta("twitter:description"));
+            imageUrl    = decode(getMeta("og:image") || getMeta("twitter:image"));
+            ogVideoUrl  = decode(getMeta("og:video:url") || getMeta("og:video:secure_url") || getMeta("og:video"));
+
+            if (site)  metaParts.push(`PLATAFORMA: ${site}`);
+            if (title) metaParts.push(`TÍTULO/LEGENDA: ${title}`);
+            if (desc && desc !== title) metaParts.push(`DESCRIÇÃO/CAPTION: ${desc}`);
           }
         } catch {
-          transcriptWarn = "Não consegui acessar o link — formatado com o texto disponível.";
+          transcriptWarn = "Não consegui acessar o link.";
         }
+
+        const contextSections: string[] = [];
+        if (metaParts.length) contextSections.push(metaParts.join("\n"));
+
+        // Step B: GPT-4o vision on thumbnail/image (reads text in arte, describes visual)
+        if (imageUrl && OPENAI_KEY) {
+          try {
+            await sendMessage(chat_id, "🖼️ Analisando imagem/thumbnail com visão...");
+            const vRes = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
+              body: JSON.stringify({
+                model: "gpt-4o",
+                max_tokens: 700,
+                response_format: { type: "json_object" },
+                messages: [{
+                  role: "user",
+                  content: [
+                    { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
+                    { type: "text", text: `Analise esta imagem de um post de Instagram para criação de conteúdo.
+Retorne JSON com:
+{
+  "textos": "todo texto visível na imagem, palavra por palavra",
+  "tema": "tema/mensagem principal que o post comunica",
+  "descricao": "descrição visual: layout, cores, pessoas, expressões, elementos gráficos",
+  "tipo_post": "arte_grafica | foto_pessoa | foto_produto | carrossel_capa | video_thumbnail | screenshot"
+}` }
+                  ]
+                }]
+              })
+            });
+            if (vRes.ok) {
+              const vData = await vRes.json();
+              const vRaw = vData.choices?.[0]?.message?.content ?? "{}";
+              const vObj = JSON.parse(vRaw);
+              const vParts: string[] = [];
+              if (vObj.tipo_post) vParts.push(`TIPO DE CRIATIVO: ${vObj.tipo_post}`);
+              if (vObj.textos)    vParts.push(`TEXTO VISÍVEL NA ARTE:\n${vObj.textos}`);
+              if (vObj.tema)      vParts.push(`TEMA/MENSAGEM: ${vObj.tema}`);
+              if (vObj.descricao) vParts.push(`DESCRIÇÃO VISUAL: ${vObj.descricao}`);
+              if (vParts.length)  contextSections.push(`--- ANÁLISE VISUAL DA IMAGEM ---\n${vParts.join("\n")}`);
+            }
+          } catch { /* vision failed — continue with meta only */ }
+        }
+
+        // Step C: try to transcribe video audio via og:video
+        if (ogVideoUrl && OPENAI_KEY) {
+          try {
+            await sendMessage(chat_id, "🎬 Tentando transcrever áudio do vídeo...");
+            // HEAD first to check size — Whisper limit is 25 MB
+            const headRes = await fetch(ogVideoUrl, { method: "HEAD" });
+            const sizeBytes = parseInt(headRes.headers.get("content-length") ?? "0");
+            const sizeMB = sizeBytes / (1024 * 1024);
+
+            if (sizeMB < 23 || sizeBytes === 0) {
+              const vidRes = await fetch(ogVideoUrl);
+              if (vidRes.ok) {
+                const vidBlob = await vidRes.blob();
+                const form = new FormData();
+                form.append("file", vidBlob, "video.mp4");
+                form.append("model", "whisper-1");
+                form.append("language", "pt");
+                const wRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${OPENAI_KEY}` },
+                  body: form,
+                });
+                if (wRes.ok) {
+                  const wData = await wRes.json();
+                  if (wData.text) {
+                    contextSections.push(`--- TRANSCRIÇÃO DO ÁUDIO DO VÍDEO ---\n${wData.text.slice(0, 4000)}`);
+                  }
+                }
+              }
+            } else {
+              transcriptWarn = `Vídeo muito grande (${sizeMB.toFixed(0)} MB) — transcrição de áudio ignorada.`;
+            }
+          } catch {
+            // video transcription failed silently — image vision + meta are enough
+          }
+        }
+
+        extraContext = contextSections.join("\n\n");
       }
     }
 
@@ -689,11 +787,15 @@ Comandos disponíveis:
 
     const isWilliam = slug !== "madruga";
     const accountVoice = isWilliam
-      ? "William Madruga — contador, advogado e palestrante. Fala em 1ª pessoa, tom direto e especialista."
-      : "Madruga Contabilidade — escritório contábil. Tom leve e acessível para empresários de PMEs.";
+      ? `William Madruga — contador, advogado e palestrante (perfil pessoal @williamnmadruga).
+Voz: direta, posicionada, profissional + humana. Fala em 1ª pessoa. Traduz técnico em impacto prático.
+Público: empresários, MEI, donos de PMEs.`
+      : `Madruga Contabilidade — escritório contábil que atende +1000 empresas (@madrugacontabilidade).
+Voz: leve, acessível, próxima. Fala COM o empresário, não PARA.
+Público: empresários de todos os portes no Sul do Brasil.`;
 
     const contextParts: string[] = [];
-    if (rawIdea)    contextParts.push(`IDEIA:\n${rawIdea}`);
+    if (rawIdea)      contextParts.push(`IDEIA/CONTEXTO DO CRIADOR:\n${rawIdea}`);
     if (extraContext) contextParts.push(extraContext);
 
     let ideaResult: { titulo?: string; tipo?: string; prompt?: string; justificativa?: string } = {};
@@ -704,28 +806,28 @@ Comandos disponíveis:
         body: JSON.stringify({
           model: "gpt-4o-mini",
           temperature: 0.8,
-          max_tokens: 900,
+          max_tokens: 1200,
           response_format: { type: "json_object" },
           messages: [
             {
               role: "system",
-              content: `Você é o assistente criativo do perfil do Instagram: ${accountVoice}
+              content: `Você é o assistente criativo de Instagram de: ${accountVoice}
 
-Transforme o material recebido em um briefing estruturado de conteúdo para Instagram.
+Analise TODO o material recebido (transcrição, texto visível em artes, descrição visual, caption, áudio) e transforme em um briefing completo de produção.
 
-FORMATOS DISPONÍVEIS: reel | carrossel | story | feed
+FORMATOS: reel | carrossel | story | feed
 
 RETORNE APENAS JSON VÁLIDO:
 {
-  "titulo": "título interno curto e chamativo (máx 70 chars)",
+  "titulo": "título interno chamativo que resume o conteúdo (máx 70 chars)",
   "tipo": "reel" | "carrossel" | "story" | "feed",
-  "prompt": "briefing completo: tema central, insight principal, gancho viral, estrutura sugerida (para reel: cenas com timecodes), tom, CTA — mínimo 120 palavras",
-  "justificativa": "por que esse formato e ângulo vão performar bem (1-2 frases)"
+  "prompt": "BRIEFING COMPLETO DE PRODUÇÃO com: (1) tema central e insight principal extraído do material, (2) gancho viral para os 3 primeiros segundos, (3) estrutura cena a cena para reel OU slide a slide para carrossel com timecodes/numeração, (4) tom emocional e linguagem, (5) CTA final. Mínimo 150 palavras. Use o conteúdo real analisado, não invente.",
+  "justificativa": "por que esse formato e ângulo vão performar — cite elementos específicos do material analisado (1-2 frases)"
 }`,
             },
             {
               role: "user",
-              content: contextParts.join("\n\n") || "Sem material — crie um briefing genérico.",
+              content: contextParts.join("\n\n") || "Sem material enviado.",
             },
           ],
         }),
