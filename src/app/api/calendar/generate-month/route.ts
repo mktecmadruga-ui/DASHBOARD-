@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "ANTHROPIC_API_KEY não configurada" }, { status: 503 });
   }
 
-  const { slug, month, year } = await req.json();
+  const { slug, month, year, competitorUsername, competitorPosts } = await req.json();
   if (!slug || !month || !year) {
     return Response.json({ error: "slug, month e year obrigatórios" }, { status: 400 });
   }
@@ -88,10 +88,20 @@ export async function POST(req: NextRequest) {
   const monthName  = getMonthName(Number(month));
   const schedule   = buildSchedule(Number(year), Number(month));
 
+  // Build competitor context block if posts were provided
+  const competitorBlock = competitorUsername && Array.isArray(competitorPosts) && competitorPosts.length > 0
+    ? `\n## Referência de concorrente: @${competitorUsername}
+Esses são os top posts mais recentes desse perfil. Use-os como INSPIRAÇÃO de temas e ângulos — NÃO copie, adapte 100% para a voz e público de ${accountTag}:
+${(competitorPosts as Array<{ caption?: string; likeCount?: number; commentCount?: number; mediaType?: string }>)
+  .slice(0, 5)
+  .map((p, i) => `${i + 1}. [${p.mediaType ?? "post"}] ${(p.caption ?? "").slice(0, 200)} (${p.likeCount ?? 0} likes, ${p.commentCount ?? 0} comentários)`)
+  .join("\n")}`
+    : "";
+
   const prompt = `Você é o estrategista de conteúdo de ${accountTag}.
 
 ${voice}
-
+${competitorBlock}
 ## Tarefa
 Gere o planejamento completo de conteúdo para ${monthName}/${year}.
 São ${schedule.length} conteúdos distribuídos conforme o cronograma abaixo.
@@ -106,7 +116,7 @@ ${schedule.map((s, i) => `${i + 1}. Data: ${s.date} | Tipo: ${s.tipo} | Semana $
 - Carrossels: estrutura de checklist ou "X coisas que você precisa saber"
 - Feed: reflexão curta ou dado surpreendente
 - NÃO repita temas na mesma semana
-- Use datas e prazos reais de ${monthName}/${year} quando relevante
+- Use datas e prazos reais de ${monthName}/${year} quando relevante${competitorUsername ? `\n- Inspire-se nos temas do concorrente @${competitorUsername}, mas adapte completamente para ${accountTag}` : ""}
 
 Retorne APENAS um array JSON válido (sem markdown), com exatamente ${schedule.length} objetos:
 [

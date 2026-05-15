@@ -400,22 +400,46 @@ export default function ContentCalendar() {
   const { publishing, lastResult, dismissResult } = useAutoPublisher(events, setEvents, slug);
 
   // ── Generate full month ───────────────────────────────────────────────────
-  const [genLoading, setGenLoading] = useState(false);
-  const [genDone,    setGenDone]    = useState(false);
-  const [genError,   setGenError]   = useState("");
+  const [genLoading,    setGenLoading]    = useState(false);
+  const [genDone,       setGenDone]       = useState(false);
+  const [genError,      setGenError]      = useState("");
+  const [genModalOpen,  setGenModalOpen]  = useState(false);
+  const [genCompetitor, setGenCompetitor] = useState("");
+  const [genCompLoading,setGenCompLoading]= useState(false);
 
   async function generateMonth() {
-    setGenLoading(true); setGenError(""); setGenDone(false);
+    setGenLoading(true); setGenError(""); setGenDone(false); setGenModalOpen(false);
     const now = new Date();
     try {
+      // Optionally fetch competitor posts first
+      let competitorPosts = null;
+      if (genCompetitor.trim()) {
+        setGenCompLoading(true);
+        try {
+          const compRes  = await fetch("/api/competitors/lookup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: genCompetitor.replace(/^@/, "").trim() }),
+          });
+          const compJson = await compRes.json();
+          if (compRes.ok && compJson.posts?.length) competitorPosts = compJson.posts.slice(0, 5);
+        } catch { /* ignore — proceed without competitor data */ }
+        setGenCompLoading(false);
+      }
+
       const res  = await fetch("/api/calendar/generate-month", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, month: now.getMonth() + 1, year: now.getFullYear() }),
+        body: JSON.stringify({
+          slug,
+          month: now.getMonth() + 1,
+          year:  now.getFullYear(),
+          competitorUsername: genCompetitor.replace(/^@/, "").trim() || null,
+          competitorPosts,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Erro ao gerar");
-      // Reload events from server
       const reload = await fetch(`/api/calendar?slug=${slug}`);
       const reloadJson = await reload.json();
       if (reloadJson.events?.length) setEvents(reloadJson.events);
@@ -423,7 +447,7 @@ export default function ContentCalendar() {
       setTimeout(() => setGenDone(false), 4000);
     } catch (e) {
       setGenError(e instanceof Error ? e.message : "Erro desconhecido");
-    } finally { setGenLoading(false); }
+    } finally { setGenLoading(false); setGenCompLoading(false); }
   }
 
   // Best times to post — computed from real media history
@@ -860,13 +884,13 @@ export default function ContentCalendar() {
             </button>
             <button
               type="button"
-              onClick={generateMonth}
+              onClick={() => genLoading ? null : setGenModalOpen(true)}
               disabled={genLoading}
               title="Gerar planejamento do mês com IA"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border border-primary/30 bg-primary/8 text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {genLoading
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Gerando...</>
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{genCompLoading ? "Buscando concorrente..." : "Gerando..."}</>
                 : genDone
                   ? <><Sparkles className="w-3.5 h-3.5" />Gerado!</>
                   : <><Sparkles className="w-3.5 h-3.5" />Gerar Mês</>}
@@ -881,6 +905,61 @@ export default function ContentCalendar() {
             <button type="button" onClick={() => setGenError("")} className="ml-auto text-red-400 hover:text-red-600">×</button>
           </div>
         )}
+
+        {/* Generate month modal */}
+        <AnimatePresence>
+          {genModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+              onClick={() => setGenModalOpen(false)}>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4"
+              >
+                <div>
+                  <h3 className="font-bold text-text-dark text-base flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" /> Gerar Mês Completo
+                  </h3>
+                  <p className="text-xs text-text-light mt-1">
+                    15 conteúdos distribuídos — 4 reels, 4 carrossels, 7 posts de feed
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-text-dark">
+                    @ do concorrente <span className="text-text-light font-normal">(opcional)</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium select-none">@</span>
+                    <input
+                      type="text"
+                      value={genCompetitor}
+                      onChange={e => setGenCompetitor(e.target.value)}
+                      placeholder="perfil_do_concorrente"
+                      className="w-full pl-8 pr-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 text-sm text-text-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+                    />
+                  </div>
+                  <p className="text-[11px] text-text-light">
+                    Se informado, o Claude vai analisar os top posts desse perfil e gerar conteúdos inspirados neles, adaptados à sua voz.
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setGenModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+                    Cancelar
+                  </button>
+                  <button type="button" onClick={generateMonth}
+                    className="flex-1 py-2.5 rounded-2xl gradient-primary text-white text-sm font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                    <Sparkles className="w-4 h-4" /> Gerar agora
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Auto-publish toast */}
         <AnimatePresence>
