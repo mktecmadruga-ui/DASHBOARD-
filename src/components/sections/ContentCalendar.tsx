@@ -886,14 +886,14 @@ export default function ContentCalendar() {
               type="button"
               onClick={() => genLoading ? null : setGenModalOpen(true)}
               disabled={genLoading}
-              title="Gerar planejamento do mês com IA"
+              title="Gerar planejamento da semana com IA"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border border-primary/30 bg-primary/8 text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {genLoading
                 ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{genCompLoading ? "Buscando concorrente..." : "Gerando..."}</>
                 : genDone
                   ? <><Sparkles className="w-3.5 h-3.5" />Gerado!</>
-                  : <><Sparkles className="w-3.5 h-3.5" />Gerar Mês</>}
+                  : <><Sparkles className="w-3.5 h-3.5" />Gerar Semana</>}
             </button>
           </div>
         </div>
@@ -920,10 +920,10 @@ export default function ContentCalendar() {
               >
                 <div>
                   <h3 className="font-bold text-text-dark text-base flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary" /> Gerar Mês Completo
+                    <Sparkles className="w-4 h-4 text-primary" /> Gerar Semana com IA
                   </h3>
                   <p className="text-xs text-text-light mt-1">
-                    15 conteúdos distribuídos — 4 reels, 4 carrossels, 7 posts de feed
+                    4 conteúdos para a semana — 1 reel, 1 carrossel, 2 posts de feed
                   </p>
                 </div>
 
