@@ -1,6 +1,6 @@
 /**
  * POST /api/calendar/export-pdf
- * Generates a PDF with all rascunho events for a slug,
+ * Generates a clean minimal PDF with all rascunho events for a slug,
  * sends it to Telegram, and returns { ok, messageId }.
  *
  * Body: { slug: "william" | "madruga" }
@@ -12,127 +12,98 @@ import { renderToBuffer, Document, Page, Text, View, StyleSheet } from "@react-p
 export const dynamic     = "force-dynamic";
 export const maxDuration = 60;
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const BOT_TOKEN       = process.env.TELEGRAM_BOT_TOKEN;
 const WILLIAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID_WILLIAM;
 const MADRUGA_CHAT_ID = process.env.TELEGRAM_CHAT_ID_MADRUGA ?? WILLIAM_CHAT_ID;
 
-// ─── PDF Styles ───────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
+// ─── Minimal styles ───────────────────────────────────────────────────────────
+const s = StyleSheet.create({
   page: {
     fontFamily: "Helvetica",
-    backgroundColor: "#F8F9FB",
-    padding: 40,
-  },
-  header: {
-    marginBottom: 24,
-    borderBottom: "2 solid #7B61FF",
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontFamily: "Helvetica-Bold",
-    color: "#1E1B4B",
-  },
-  headerSub: {
-    fontSize: 10,
-    color: "#6B7280",
-    marginTop: 4,
-  },
-  card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    borderLeft: "4 solid #7B61FF",
+    paddingTop: 48,
+    paddingBottom: 48,
+    paddingHorizontal: 50,
+    fontSize: 10,
+    color: "#111827",
+    lineHeight: 1.6,
   },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
+  // Header
+  docTitle: {
+    fontSize: 18,
+    fontFamily: "Helvetica-Bold",
+    color: "#111827",
+    marginBottom: 4,
   },
-  cardTitle: {
+  docSub: {
+    fontSize: 9,
+    color: "#6B7280",
+    marginBottom: 32,
+  },
+  // Divider between posts
+  divider: {
+    borderBottom: "1 solid #E5E7EB",
+    marginVertical: 20,
+  },
+  // Post number / title
+  postNumber: {
+    fontSize: 9,
+    color: "#9CA3AF",
+    fontFamily: "Helvetica-Bold",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  postTitle: {
     fontSize: 13,
     fontFamily: "Helvetica-Bold",
-    color: "#1E1B4B",
-    flex: 1,
-    marginRight: 8,
+    color: "#111827",
+    marginBottom: 6,
   },
-  badge: {
-    fontSize: 9,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    backgroundColor: "#EDE9FE",
-    color: "#7B61FF",
-    fontFamily: "Helvetica-Bold",
-  },
-  dateRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 10,
-  },
-  datePill: {
+  postMeta: {
     fontSize: 9,
     color: "#6B7280",
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    marginBottom: 16,
   },
-  sectionLabel: {
-    fontSize: 9,
+  // Section label
+  label: {
+    fontSize: 8,
     fontFamily: "Helvetica-Bold",
     color: "#9CA3AF",
     textTransform: "uppercase",
     letterSpacing: 1,
-    marginTop: 8,
-    marginBottom: 3,
+    marginBottom: 4,
+    marginTop: 12,
   },
-  bodyText: {
+  // Body text
+  body: {
     fontSize: 10,
     color: "#374151",
-    lineHeight: 1.6,
-  },
-  hookBox: {
-    backgroundColor: "#EDE9FE",
-    borderRadius: 4,
-    padding: 8,
-    marginTop: 4,
-    marginBottom: 6,
-  },
-  hookText: {
-    fontSize: 10,
-    color: "#5B21B6",
-    fontFamily: "Helvetica-Bold",
-    lineHeight: 1.5,
+    lineHeight: 1.65,
   },
   hashtags: {
     fontSize: 9,
     color: "#7B61FF",
     marginTop: 4,
   },
-  divider: {
-    borderBottom: "1 solid #E5E7EB",
-    marginTop: 4,
-    marginBottom: 8,
-  },
+  // Footer
   footer: {
-    marginTop: 20,
-    paddingTop: 12,
-    borderTop: "1 solid #E5E7EB",
+    position: "absolute",
+    bottom: 28,
+    left: 50,
+    right: 50,
     flexDirection: "row",
     justifyContent: "space-between",
   },
   footerText: {
-    fontSize: 9,
-    color: "#9CA3AF",
+    fontSize: 8,
+    color: "#D1D5DB",
   },
   noContent: {
-    textAlign: "center",
     fontSize: 12,
     color: "#9CA3AF",
-    marginTop: 40,
+    textAlign: "center",
+    marginTop: 60,
   },
 });
 
@@ -146,66 +117,70 @@ type Event = {
 };
 
 function RascunhosPDF({ events, slug, date }: { events: Event[]; slug: string; date: string }) {
-  const accountLabel = slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
+  const account = slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
+
   return (
-    <Document title={`Rascunhos — ${accountLabel}`} author="InstaMetrics Dashboard">
-      <Page size="A4" style={styles.page}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>📋 Rascunhos para aprovação</Text>
-          <Text style={styles.headerSub}>{accountLabel}  ·  {events.length} conteúdo{events.length !== 1 ? "s" : ""}  ·  Gerado em {date}</Text>
-        </View>
+    <Document title={`Rascunhos — ${account}`} author="Dashboard">
+      <Page size="A4" style={s.page}>
 
-        {events.length === 0 ? (
-          <Text style={styles.noContent}>Nenhum rascunho encontrado.</Text>
-        ) : (
-          events.map((ev, i) => (
-            <View key={ev.id} style={styles.card} wrap={false}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{i + 1}. {ev.titulo}</Text>
-                <Text style={styles.badge}>{TIPO_LABEL[ev.tipo] ?? ev.tipo}</Text>
-              </View>
+        {/* Doc header */}
+        <Text style={s.docTitle}>Rascunhos para aprovação</Text>
+        <Text style={s.docSub}>
+          {account}  ·  {events.length} conteúdo{events.length !== 1 ? "s" : ""}  ·  {date}
+        </Text>
 
-              <View style={styles.dateRow}>
-                <Text style={styles.datePill}>📅 {ev.data}</Text>
-              </View>
-
-              {ev.prompt ? (
-                <>
-                  <Text style={styles.sectionLabel}>Gancho / Hook</Text>
-                  <View style={styles.hookBox}>
-                    <Text style={styles.hookText}>{ev.prompt}</Text>
-                  </View>
-                </>
-              ) : null}
-
-              {ev.copy ? (
-                <>
-                  <Text style={styles.sectionLabel}>{ev.tipo === "reel" ? "Roteiro" : ev.tipo === "carrossel" ? "Slides" : "Texto"}</Text>
-                  <View style={styles.divider} />
-                  <Text style={styles.bodyText}>{ev.copy.slice(0, 600)}{ev.copy.length > 600 ? "…" : ""}</Text>
-                </>
-              ) : null}
-
-              {ev.legenda ? (
-                <>
-                  <Text style={[styles.sectionLabel, { marginTop: 10 }]}>Legenda Instagram</Text>
-                  <Text style={styles.bodyText}>{ev.legenda}</Text>
-                </>
-              ) : null}
-
-              {ev.hashtags ? (
-                <Text style={styles.hashtags}>#{ev.hashtags.replace(/,/g, " #")}</Text>
-              ) : null}
-            </View>
-          ))
+        {events.length === 0 && (
+          <Text style={s.noContent}>Nenhum rascunho encontrado.</Text>
         )}
 
+        {events.map((ev, i) => (
+          <View key={ev.id}>
+            {/* Divider between posts (skip before first) */}
+            {i > 0 && <View style={s.divider}/>}
+
+            <Text style={s.postNumber}>
+              {String(i + 1).padStart(2, "0")}  ·  {TIPO_LABEL[ev.tipo] ?? ev.tipo}
+            </Text>
+            <Text style={s.postTitle}>{ev.titulo}</Text>
+            <Text style={s.postMeta}>{ev.data}  ·  {ev.tipo}</Text>
+
+            {ev.prompt ? (
+              <View>
+                <Text style={s.label}>Gancho / Hook</Text>
+                <Text style={s.body}>{ev.prompt}</Text>
+              </View>
+            ) : null}
+
+            {ev.copy ? (
+              <View>
+                <Text style={s.label}>
+                  {ev.tipo === "reel" ? "Roteiro" : ev.tipo === "carrossel" ? "Slides" : "Texto"}
+                </Text>
+                <Text style={s.body}>{ev.copy}</Text>
+              </View>
+            ) : null}
+
+            {ev.legenda ? (
+              <View>
+                <Text style={s.label}>Legenda</Text>
+                <Text style={s.body}>{ev.legenda}</Text>
+              </View>
+            ) : null}
+
+            {ev.hashtags ? (
+              <Text style={s.hashtags}>
+                {"#" + ev.hashtags.replace(/,/g, "  #")}
+              </Text>
+            ) : null}
+          </View>
+        ))}
+
         {/* Footer */}
-        <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>InstaMetrics Dashboard  ·  {accountLabel}</Text>
-          <Text style={styles.footerText} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+        <View style={s.footer} fixed>
+          <Text style={s.footerText}>{account}</Text>
+          <Text style={s.footerText} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}/>
         </View>
+
       </Page>
     </Document>
   );
@@ -219,7 +194,6 @@ export async function POST(req: NextRequest) {
   const chatId = slug === "william" ? WILLIAM_CHAT_ID : MADRUGA_CHAT_ID;
   if (!chatId) return Response.json({ error: "chat_id não configurado" }, { status: 503 });
 
-  // Fetch rascunhos from Supabase
   const sb = getSupabase();
   if (!sb) return Response.json({ error: "Supabase não configurado" }, { status: 503 });
 
@@ -235,24 +209,21 @@ export async function POST(req: NextRequest) {
   const events: Event[] = data ?? [];
   const date = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 
-  // Generate PDF buffer
   const pdfBuffer = await renderToBuffer(
     <RascunhosPDF events={events} slug={slug} date={date} />
   );
 
-  // Send to Telegram as document
   const formData = new FormData();
   formData.append("chat_id", chatId);
-  formData.append("caption",
-    `📋 *Rascunhos para aprovação*\n\n` +
-    `${events.length} conteúdo${events.length !== 1 ? "s" : ""} aguardando revisão.\n\n` +
-    `Revise o PDF e responda com suas alterações ou ✅ aprovado!`
+  formData.append(
+    "caption",
+    `📋 *Rascunhos para aprovação*\n\n${events.length} conteúdo${events.length !== 1 ? "s" : ""} aguardando revisão.\n\nRevise o PDF e responda com suas alterações ou ✅ aprovado!`
   );
   formData.append("parse_mode", "Markdown");
   formData.append(
     "document",
     new Blob([pdfBuffer.buffer as ArrayBuffer], { type: "application/pdf" }) as unknown as File,
-    `rascunhos-${slug}-${new Date().toISOString().slice(0,10)}.pdf`
+    `rascunhos-${slug}-${new Date().toISOString().slice(0, 10)}.pdf`
   );
 
   const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
