@@ -399,6 +399,33 @@ export default function ContentCalendar() {
   const [events, setEvents] = usePersistedEvents(slug);
   const { publishing, lastResult, dismissResult } = useAutoPublisher(events, setEvents, slug);
 
+  // ── Generate full month ───────────────────────────────────────────────────
+  const [genLoading, setGenLoading] = useState(false);
+  const [genDone,    setGenDone]    = useState(false);
+  const [genError,   setGenError]   = useState("");
+
+  async function generateMonth() {
+    setGenLoading(true); setGenError(""); setGenDone(false);
+    const now = new Date();
+    try {
+      const res  = await fetch("/api/calendar/generate-month", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, month: now.getMonth() + 1, year: now.getFullYear() }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro ao gerar");
+      // Reload events from server
+      const reload = await fetch(`/api/calendar?slug=${slug}`);
+      const reloadJson = await reload.json();
+      if (reloadJson.events?.length) setEvents(reloadJson.events);
+      setGenDone(true);
+      setTimeout(() => setGenDone(false), 4000);
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : "Erro desconhecido");
+    } finally { setGenLoading(false); }
+  }
+
   // Best times to post — computed from real media history
   const [bestTimes, setBestTimes] = useState<BestTime[]>(FALLBACK_TIMES);
   useEffect(() => {
@@ -831,8 +858,29 @@ export default function ContentCalendar() {
               className="px-3 py-1.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity">
               + Adicionar
             </button>
+            <button
+              type="button"
+              onClick={generateMonth}
+              disabled={genLoading}
+              title="Gerar planejamento do mês com IA"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border border-primary/30 bg-primary/8 text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {genLoading
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Gerando...</>
+                : genDone
+                  ? <><Sparkles className="w-3.5 h-3.5" />Gerado!</>
+                  : <><Sparkles className="w-3.5 h-3.5" />Gerar Mês</>}
+            </button>
           </div>
         </div>
+
+        {/* Generate month error */}
+        {genError && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs mb-3">
+            <span>⚠️ {genError}</span>
+            <button type="button" onClick={() => setGenError("")} className="ml-auto text-red-400 hover:text-red-600">×</button>
+          </div>
+        )}
 
         {/* Auto-publish toast */}
         <AnimatePresence>
