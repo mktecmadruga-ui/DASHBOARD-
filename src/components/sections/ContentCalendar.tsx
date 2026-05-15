@@ -11,6 +11,7 @@ import {
   Copy, Check, Globe,
   Upload, X as XIcon, Image as ImageIcon, Clock, Send,
   CheckCircle2, AlertCircle, Kanban, FileText,
+  Search, MoreHorizontal, Plus, FileDown, Lightbulb,
 } from "lucide-react";
 import type { CalendarEvent } from "@/types";
 import { createBrowserClient } from "@supabase/ssr";
@@ -160,31 +161,46 @@ function KanbanCard({ ev, statusDot, tipoOpts, onCardClick }: {
   );
 }
 
-function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick, onIdeaClick, onExportPdf, pdfLoading }: {
+const COL_HINTS: Record<string, string> = {
+  rascunho:  "Ideias em construção",
+  roteiro:   "Roteiro pronto pra criar",
+  criativo:  "Arte pronta — só agendar",
+  agendado:  "Agendado para publicar",
+  publicado: "Já no Instagram",
+};
+
+function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick, onIdeaClick }: {
   col: KanbanCol;
   events: CalendarEvent[];
   statusDot: Record<string, string>;
   tipoOpts: { value: string; label: string }[];
   onCardClick: (ev: CalendarEvent) => void;
   onIdeaClick?: () => void;
-  onExportPdf?: () => void;
-  pdfLoading?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: col.status });
 
   return (
-    <div
+    <section
       ref={setNodeRef}
+      aria-label={`Coluna ${col.label} com ${events.length} itens`}
       className={cn(
         "flex flex-col gap-2 min-w-[180px] flex-1 min-h-[320px] rounded-2xl border-2 p-3 transition-all duration-150",
         isOver ? "border-primary/60 bg-primary/5 scale-[1.01]" : cn(col.bg, col.border)
       )}>
-      <div className="flex items-center justify-between mb-1">
-        <span className={cn("text-xs font-semibold", col.color)}>{col.label}</span>
-        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md border", col.bg, col.color, col.border)}>
+      <header className="flex items-start justify-between mb-1">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className={cn("w-1.5 h-1.5 rounded-full", statusDot[col.status])} aria-hidden="true"/>
+            <span className={cn("text-xs font-semibold", col.color)}>{col.label}</span>
+          </div>
+          <span className="text-[9px] text-text-light leading-tight">{COL_HINTS[col.status]}</span>
+        </div>
+        <span
+          aria-label={`${events.length} itens`}
+          className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md border", col.bg, col.color, col.border)}>
           {events.length}
         </span>
-      </div>
+      </header>
       <div className="flex flex-col gap-2 min-h-[80px]">
         {events.map(ev => (
           <KanbanCard key={ev.id} ev={ev} statusDot={statusDot} tipoOpts={tipoOpts} onCardClick={onCardClick}/>
@@ -204,23 +220,13 @@ function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick, onIdeaCli
         <button
           type="button"
           onClick={onIdeaClick}
-          className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 text-primary text-[11px] font-medium transition-all cursor-pointer">
-          <Sparkles className="w-3 h-3"/>
-          💡 Nova Ideia com IA
+          aria-label="Criar nova ideia com IA nesta coluna"
+          className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 text-primary text-[11px] font-medium transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30">
+          <Lightbulb className="w-3 h-3"/>
+          Nova Ideia com IA
         </button>
       )}
-      {onExportPdf && events.length > 0 && (
-        <button
-          type="button"
-          onClick={onExportPdf}
-          disabled={pdfLoading}
-          className="mt-1 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-500 text-[11px] font-medium transition-all cursor-pointer disabled:opacity-50">
-          {pdfLoading
-            ? <><Loader2 className="w-3 h-3 animate-spin"/>Enviando PDF...</>
-            : <><Send className="w-3 h-3"/>📄 Enviar PDF pro Telegram</>}
-        </button>
-      )}
-    </div>
+    </section>
   );
 }
 
@@ -304,6 +310,28 @@ function usePersistedEvents(slug: string) {
   }
 
   return [events, setEvents] as const;
+}
+
+// ─── Filter chip ──────────────────────────────────────────────────────────────
+function FilterChip({ active, onClick, children }: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30",
+        active
+          ? "bg-primary text-white shadow-sm"
+          : "bg-slate-50 text-text-medium hover:bg-slate-100 border border-slate-200"
+      )}>
+      {children}
+    </button>
+  );
 }
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
@@ -435,20 +463,18 @@ export default function ContentCalendar() {
       setTimeout(() => setPdfToast(""), 6000);
     } finally { setPdfLoading(false); }
   }
-  const [genDone,       setGenDone]       = useState(false);
   const [genError,      setGenError]      = useState("");
   const [genModalOpen,  setGenModalOpen]  = useState(false);
   const [genCompetitor, setGenCompetitor] = useState("");
-  const [genCompLoading,setGenCompLoading]= useState(false);
 
   async function generateMonth() {
-    setGenLoading(true); setGenError(""); setGenDone(false); setGenModalOpen(false);
+    setGenLoading(true); setGenError(""); setGenModalOpen(false);
     const now = new Date();
     try {
       // Optionally fetch competitor posts first
       let competitorPosts = null;
       if (genCompetitor.trim()) {
-        setGenCompLoading(true);
+        
         try {
           const compRes  = await fetch("/api/competitors/lookup", {
             method: "POST",
@@ -458,7 +484,7 @@ export default function ContentCalendar() {
           const compJson = await compRes.json();
           if (compRes.ok && compJson.posts?.length) competitorPosts = compJson.posts.slice(0, 5);
         } catch { /* ignore — proceed without competitor data */ }
-        setGenCompLoading(false);
+        
       }
 
       const res  = await fetch("/api/calendar/generate-month", {
@@ -477,11 +503,9 @@ export default function ContentCalendar() {
       const reload = await fetch(`/api/calendar?slug=${slug}`);
       const reloadJson = await reload.json();
       if (reloadJson.events?.length) setEvents(reloadJson.events);
-      setGenDone(true);
-      setTimeout(() => setGenDone(false), 4000);
     } catch (e) {
       setGenError(e instanceof Error ? e.message : "Erro desconhecido");
-    } finally { setGenLoading(false); setGenCompLoading(false); }
+    } finally { setGenLoading(false);  }
   }
 
   // Best times to post — computed from real media history
@@ -502,6 +526,47 @@ export default function ContentCalendar() {
   useEffect(() => { setWeekStart(getMonday(new Date())); }, []);
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected]   = useState<CalendarEvent | null>(null);
+
+  // ── Search / Filters ──────────────────────────────────────────────────────
+  const [search,       setSearch]       = useState("");
+  const [filterTipo,   setFilterTipo]   = useState<CalendarEvent["tipo"] | "all">("all");
+  const [filterStatus, setFilterStatus] = useState<CalendarEvent["status"] | "all">("all");
+  const [menuOpen,     setMenuOpen]     = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Filtered events used by both week grid and kanban
+  const filteredEvents = events.filter(ev => {
+    if (filterTipo   !== "all" && ev.tipo   !== filterTipo)   return false;
+    if (filterStatus !== "all" && ev.status !== filterStatus) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const haystack = [ev.titulo, ev.prompt, ev.copy, ev.legenda].filter(Boolean).join(" ").toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+  const hasActiveFilter = !!search.trim() || filterTipo !== "all" || filterStatus !== "all";
+
+  // Keyboard shortcuts: / = search, N = new, G = generate week, Esc = close
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      const isTyping = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+
+      if (e.key === "Escape") {
+        if (menuOpen) { setMenuOpen(false); e.preventDefault(); return; }
+        return;
+      }
+      if (isTyping) return; // don't hijack typing in inputs (except '/' which we want to capture from page level)
+
+      if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); return; }
+      if (e.key === "n" || e.key === "N") { e.preventDefault(); openNew(); return; }
+      if (e.key === "g" || e.key === "G") { e.preventDefault(); if (!genLoading) setGenModalOpen(true); return; }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen, genLoading]);
 
   // Deeplink: open event from URL (?event=ID) — used by Telegram links
   useEffect(() => {
@@ -892,42 +957,141 @@ export default function ContentCalendar() {
   return (
     <>
       <Card delay={0.6}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 className="text-lg font-semibold text-text-dark">Calendário de Conteúdo</h3>
-            <p className="text-sm text-text-light mt-0.5">{startLabel} – {endLabel}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={goToday}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-medium border border-slate-200 text-text-medium hover:bg-slate-50 cursor-pointer transition-colors">
-              Hoje
-            </button>
-            <div className="flex border border-slate-200 rounded-xl overflow-hidden">
-              <button type="button" onClick={prevWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors">
-                <ChevronLeft className="w-4 h-4 text-text-medium"/>
-              </button>
-              <button type="button" onClick={nextWeek} className="px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors border-l border-slate-200">
-                <ChevronRight className="w-4 h-4 text-text-medium"/>
-              </button>
+        {/* ── Unified Toolbar ────────────────────────────────────────────── */}
+        <div className="flex flex-col gap-3 mb-5">
+          {/* Top row: title + primary actions */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[180px]">
+              <h3 className="text-lg font-semibold text-text-dark">Calendário de Conteúdo</h3>
+              <p className="text-xs text-text-light mt-0.5">{startLabel} – {endLabel}</p>
             </div>
-            <button type="button" onClick={()=>openNew()}
-              className="px-3 py-1.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity">
-              + Adicionar
+
+            {/* Search */}
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" aria-hidden="true"/>
+              <input
+                ref={searchRef}
+                type="search"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar conteúdo..."
+                aria-label="Buscar conteúdo no calendário"
+                aria-keyshortcuts="/"
+                className="w-full h-9 pl-9 pr-9 rounded-xl border border-slate-200 bg-white text-sm text-text-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+              />
+              {search ? (
+                <button type="button" onClick={() => setSearch("")} aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                  <XIcon className="w-3.5 h-3.5"/>
+                </button>
+              ) : (
+                <kbd className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 h-5 px-1.5 items-center rounded-md border border-slate-200 bg-slate-50 text-[10px] font-mono text-slate-400" aria-hidden="true">/</kbd>
+              )}
+            </div>
+
+            {/* Date nav */}
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={goToday} aria-label="Ir para hoje"
+                className="px-2.5 h-9 rounded-xl text-xs font-medium border border-slate-200 text-text-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer transition-colors">
+                Hoje
+              </button>
+              <div className="flex border border-slate-200 rounded-xl overflow-hidden">
+                <button type="button" onClick={prevWeek} aria-label="Semana anterior"
+                  className="px-2 h-9 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer transition-colors">
+                  <ChevronLeft className="w-4 h-4 text-text-medium"/>
+                </button>
+                <button type="button" onClick={nextWeek} aria-label="Próxima semana"
+                  className="px-2 h-9 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer transition-colors border-l border-slate-200">
+                  <ChevronRight className="w-4 h-4 text-text-medium"/>
+                </button>
+              </div>
+            </div>
+
+            {/* Primary action */}
+            <button type="button" onClick={() => openNew()} aria-keyshortcuts="n"
+              className="flex items-center gap-1.5 px-3 h-9 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-1 transition-opacity">
+              <Plus className="w-4 h-4"/> Adicionar
             </button>
-            <button
-              type="button"
-              onClick={() => genLoading ? null : setGenModalOpen(true)}
-              disabled={genLoading}
-              title="Gerar planejamento da semana com IA"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border border-primary/30 bg-primary/8 text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {genLoading
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />{genCompLoading ? "Buscando concorrente..." : "Gerando..."}</>
-                : genDone
-                  ? <><Sparkles className="w-3.5 h-3.5" />Gerado!</>
-                  : <><Sparkles className="w-3.5 h-3.5" />Gerar Semana</>}
-            </button>
+
+            {/* Overflow menu */}
+            <div className="relative">
+              <button type="button" onClick={() => setMenuOpen(o => !o)}
+                aria-label="Mais ações" aria-haspopup="menu" aria-expanded={menuOpen}
+                className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 text-text-medium hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors cursor-pointer">
+                <MoreHorizontal className="w-4 h-4"/>
+              </button>
+              <AnimatePresence>
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden="true"/>
+                    <motion.div
+                      role="menu"
+                      initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute right-0 top-full mt-1.5 w-56 rounded-2xl border border-slate-200 bg-white shadow-xl z-40 py-1.5 overflow-hidden">
+                      <button type="button" role="menuitem"
+                        onClick={() => { setMenuOpen(false); setGenModalOpen(true); }}
+                        disabled={genLoading}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-dark hover:bg-primary/5 disabled:opacity-50 transition-colors cursor-pointer text-left">
+                        {genLoading
+                          ? <Loader2 className="w-4 h-4 text-primary animate-spin"/>
+                          : <Sparkles className="w-4 h-4 text-primary"/>}
+                        <span className="flex-1">{genLoading ? "Gerando..." : "Gerar Semana com IA"}</span>
+                        <kbd className="text-[10px] font-mono text-slate-400">G</kbd>
+                      </button>
+                      <button type="button" role="menuitem"
+                        onClick={() => { setMenuOpen(false); openIdeaModal(); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-dark hover:bg-primary/5 transition-colors cursor-pointer text-left">
+                        <Lightbulb className="w-4 h-4 text-warning"/>
+                        <span className="flex-1">Nova Ideia com IA</span>
+                      </button>
+                      <div className="h-px bg-slate-100 my-1"/>
+                      <button type="button" role="menuitem"
+                        onClick={() => { setMenuOpen(false); exportPdf(); }}
+                        disabled={pdfLoading}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-dark hover:bg-primary/5 disabled:opacity-50 transition-colors cursor-pointer text-left">
+                        {pdfLoading
+                          ? <Loader2 className="w-4 h-4 text-info animate-spin"/>
+                          : <FileDown className="w-4 h-4 text-info"/>}
+                        <span className="flex-1">{pdfLoading ? "Enviando..." : "Enviar Rascunhos pro Telegram"}</span>
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Filter chips */}
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtros de calendário">
+            <span className="text-[10px] uppercase tracking-wider text-text-light font-semibold mr-1">Filtros</span>
+            <FilterChip active={filterTipo === "all"} onClick={() => setFilterTipo("all")}>Todos tipos</FilterChip>
+            {tipoOpts.map(o => (
+              <FilterChip key={o.value} active={filterTipo === o.value} onClick={() => setFilterTipo(o.value)}>
+                {o.label}
+              </FilterChip>
+            ))}
+            <span className="mx-1 w-px h-4 bg-slate-200" aria-hidden="true"/>
+            <FilterChip active={filterStatus === "all"} onClick={() => setFilterStatus("all")}>Todos status</FilterChip>
+            {statusOpts.map(o => (
+              <FilterChip key={o.value} active={filterStatus === o.value} onClick={() => setFilterStatus(o.value)}>
+                {o.label}
+              </FilterChip>
+            ))}
+            {hasActiveFilter && (
+              <button type="button"
+                onClick={() => { setSearch(""); setFilterTipo("all"); setFilterStatus("all"); }}
+                className="ml-1 flex items-center gap-1 text-[11px] text-primary hover:underline cursor-pointer">
+                <XIcon className="w-3 h-3"/> Limpar
+              </button>
+            )}
+            {hasActiveFilter && (
+              <span className="ml-auto text-[11px] text-text-light" aria-live="polite">
+                {filteredEvents.length} de {events.length} conteúdos
+              </span>
+            )}
           </div>
         </div>
 
@@ -1024,11 +1188,23 @@ export default function ContentCalendar() {
           )}
         </AnimatePresence>
 
+        {/* No-results banner */}
+        {hasActiveFilter && filteredEvents.length === 0 && (
+          <div className="mb-3 px-4 py-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center" role="status" aria-live="polite">
+            <p className="text-xs text-text-medium">Nenhum conteúdo bate com os filtros atuais.</p>
+            <button type="button"
+              onClick={() => { setSearch(""); setFilterTipo("all"); setFilterStatus("all"); }}
+              className="mt-1 text-[11px] text-primary hover:underline cursor-pointer">
+              Limpar filtros
+            </button>
+          </div>
+        )}
+
         {/* Week grid */}
         <div className="grid grid-cols-7 gap-2">
           {days.map(day => {
             const dateStr   = toStr(day);
-            const dayEvents = events.filter(e => e.data === dateStr);
+            const dayEvents = filteredEvents.filter(e => e.data === dateStr);
             const isToday   = dateStr === todayStr;
             return (
               <div key={dateStr} className="flex flex-col gap-1.5">
@@ -1119,13 +1295,11 @@ export default function ContentCalendar() {
                 <KanbanColumn
                   key={col.status}
                   col={col}
-                  events={events.filter(e => e.status === col.status)}
+                  events={filteredEvents.filter(e => e.status === col.status)}
                   statusDot={statusDot}
                   tipoOpts={tipoOpts}
                   onCardClick={openEdit}
                   onIdeaClick={col.status === "rascunho" ? openIdeaModal : undefined}
-                  onExportPdf={col.status === "rascunho" ? exportPdf : undefined}
-                  pdfLoading={col.status === "rascunho" ? pdfLoading : undefined}
                 />
               ))}
             </div>
