@@ -6,25 +6,23 @@ import { retentionCurve, retentionMetrics } from "@/data/mock-retention";
 import { COLORS } from "@/lib/constants";
 
 const stats = [
-  { label: "Hook 3s", value: `${retentionMetrics.hookRate}%`, color: "text-primary" },
-  { label: "Tempo Médio", value: `${retentionMetrics.avgWatchTime}s`, color: "text-info" },
-  { label: "Conclusão", value: `${retentionMetrics.completionRate}%`, color: "text-success" },
-  { label: "Replay", value: `${retentionMetrics.replayRate}%`, color: "text-warning" },
+  { label: "Hook 3s",     value: `${retentionMetrics.hookRate}%`,         color: "text-primary",  bg: "bg-primary/5"  },
+  { label: "Tempo Médio", value: `${retentionMetrics.avgWatchTime}s`,     color: "text-info",     bg: "bg-info/5"     },
+  { label: "Conclusão",   value: `${retentionMetrics.completionRate}%`,   color: "text-success",  bg: "bg-success/5"  },
+  { label: "Replay",      value: `${retentionMetrics.replayRate}%`,       color: "text-warning",  bg: "bg-warning/5"  },
 ];
 
 export default function RetentionAnalytics() {
   return (
-    <Card className="col-span-4" delay={0.5}>
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-text-dark">Retenção de Audiência</h3>
-        <p className="text-sm text-text-light mt-0.5">Curva de retenção segundo a segundo</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mb-4">
+    <Card
+      delay={0.5}
+      title="Retenção de Audiência"
+      subtitle="Curva de retenção segundo a segundo">
+      <div className="grid grid-cols-2 gap-2.5 mb-4">
         {stats.map((s) => (
-          <div key={s.label} className="p-3 rounded-2xl bg-slate-50">
-            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-text-light mt-0.5">{s.label}</p>
+          <div key={s.label} className={`p-3 rounded-2xl ${s.bg}`}>
+            <p className={`text-xl font-bold tabular-nums ${s.color}`}>{s.value}</p>
+            <p className="text-[11px] text-text-light mt-0.5 leading-tight">{s.label}</p>
           </div>
         ))}
       </div>
@@ -38,7 +36,9 @@ export default function RetentionAnalytics() {
         showGrid={false}
         showAxis={true}
       />
-      <p className="text-xs text-text-light text-center mt-2">Segundos do vídeo</p>
+      <p className="text-[11px] text-text-light text-center mt-2 uppercase tracking-wider">
+        Segundos do vídeo
+      </p>
     </Card>
   );
 }

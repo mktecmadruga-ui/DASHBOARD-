@@ -352,28 +352,29 @@ export default function AIInsights() {
 
   return (
     <>
-      <Card className="col-span-4" delay={0.45}>
-        <div className="flex items-center gap-2 mb-5">
-          <div className="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-          <div className="flex-1">
+      <Card
+        delay={0.45}
+        title={
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center shadow-sm">
+              <Sparkles className="w-4 h-4 text-white" aria-hidden="true"/>
+            </div>
             <h3 className="text-lg font-semibold text-text-dark">IA Insights</h3>
-            <p className="text-xs text-text-light">
-            {aiSource === "openai" ? "✨ GPT-4o · dados reais" : "Análise local · dados reais"} · clique para detalhes
-          </p>
           </div>
-          {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-        </div>
+        }
+        subtitle={`${aiSource === "openai" ? "✨ GPT-4o · dados reais" : "Análise local · dados reais"} · clique para detalhes`}
+        actions={loading ? <Loader2 className="w-4 h-4 text-primary animate-spin" aria-label="Carregando"/> : null}>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3" role="list">
           {insights.map((insight, i) => {
             const Icon = iconMap[insight.tipo];
             return (
               <motion.button key={insight.id} type="button" onClick={() => setSelected(insight)}
+                role="listitem"
+                aria-label={`${insight.titulo} — ${insight.descricao}`}
                 initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.5 + i * 0.1 }}
-                className="w-full text-left p-3 rounded-2xl border border-primary/10 bg-gradient-to-r from-primary/[0.02] to-transparent hover:border-primary/30 hover:bg-primary/[0.04] hover:shadow-glass transition-all group cursor-pointer"
+                className="w-full text-left p-3 rounded-2xl border border-primary/10 bg-gradient-to-r from-primary/[0.02] to-transparent hover:border-primary/30 hover:bg-primary/[0.04] hover:shadow-glass transition-all group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <div className="flex items-start gap-3">
                   <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/20 transition-colors">

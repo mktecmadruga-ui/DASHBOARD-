@@ -110,22 +110,25 @@ export default function ContentPerformance() {
   const selectedPostObj = byType.find((m) => m.id === selectedPost);
 
   return (
-    <Card className="col-span-6" delay={0.3}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-text-dark">Performance de Conteúdo</h3>
-        {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-      </div>
+    <Card
+      delay={0.3}
+      title="Performance de Conteúdo"
+      subtitle="Reels, feed e stories"
+      actions={loading ? <Loader2 className="w-4 h-4 text-primary animate-spin" aria-label="Carregando"/> : null}>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-slate-50 rounded-2xl mb-4">
+      <div role="tablist" aria-label="Tipo de conteúdo" className="flex gap-1 p-1 bg-slate-50 rounded-2xl mb-4">
         {tabs.map((tab) => {
           const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
           return (
-            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedPost("all"); }}
-              className={cn("flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer",
-                activeTab === tab.id ? "bg-white text-text-dark shadow-card" : "text-text-light hover:text-text-medium"
+            <button key={tab.id} type="button" role="tab" aria-selected={isActive}
+              onClick={() => { setActiveTab(tab.id); setSelectedPost("all"); }}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                isActive ? "bg-white text-text-dark shadow-card" : "text-text-light hover:text-text-medium"
               )}>
-              <Icon className="w-4 h-4" />{tab.label}
+              <Icon className="w-4 h-4" aria-hidden="true"/>{tab.label}
             </button>
           );
         })}

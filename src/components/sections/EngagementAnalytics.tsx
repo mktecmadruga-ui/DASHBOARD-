@@ -69,32 +69,34 @@ export default function EngagementAnalytics() {
   ];
 
   return (
-    <Card className="col-span-6" delay={0.35}>
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-lg font-semibold text-text-dark">Análise de Engajamento</h3>
+    <Card
+      delay={0.35}
+      title="Análise de Engajamento"
+      subtitle="Distribuição de interações no período"
+      actions={
         <div className="flex items-center gap-2">
-          {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-          <span className="text-xs text-text-light">{period.label}</span>
+          {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" aria-label="Carregando"/>}
+          <span className="text-xs text-text-light px-2.5 py-1 rounded-lg bg-slate-50 font-medium">{period.label}</span>
         </div>
-      </div>
+      }>
 
       {!totals && !loading ? (
-        <p className="text-sm text-text-light text-center py-4">Sem dados para este período.</p>
+        <p className="text-sm text-text-light text-center py-4" role="status">Sem dados para este período.</p>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-3 gap-2.5 mb-5">
             {metrics.map(m => {
               const Icon = m.icon;
               const isScore = m.format === "score";
               return (
-                <div key={m.label} className="p-3 rounded-2xl bg-slate-50/80">
-                  <div className="flex items-center justify-between mb-2">
-                    <Icon className="w-4 h-4 text-primary" />
-                  </div>
-                  <p className={cn("font-bold text-text-dark", isScore ? "text-base" : "text-lg")}>
-                    {loading ? <span className="inline-block w-12 h-5 bg-slate-200 animate-pulse rounded" /> : isScore ? `${m.value}/10` : formatNumber(m.value)}
+                <div key={m.label} className="p-3 rounded-2xl bg-slate-50/80 hover:bg-slate-50 transition-colors">
+                  <Icon className="w-4 h-4 text-primary mb-2" aria-hidden="true"/>
+                  <p className={cn("font-bold text-text-dark tabular-nums leading-tight", isScore ? "text-base" : "text-lg")}>
+                    {loading
+                      ? <span className="inline-block w-12 h-5 bg-slate-200 animate-pulse rounded" aria-hidden="true"/>
+                      : isScore ? `${m.value}/10` : formatNumber(m.value)}
                   </p>
-                  <p className="text-xs text-text-light">{m.label}</p>
+                  <p className="text-[11px] text-text-light mt-0.5 leading-tight">{m.label}</p>
                   <p className="text-[10px] text-text-light/70 mt-0.5">{m.sub}</p>
                 </div>
               );
@@ -104,7 +106,7 @@ export default function EngagementAnalytics() {
           <RadarChartComponent data={radarData} height={220} />
 
           <p className="text-[10px] text-text-light text-center mt-2">
-            Dados reais via Instagram Insights API · período: {period.label}
+            Dados reais via Instagram Insights API · período: <strong>{period.label}</strong>
           </p>
         </>
       )}

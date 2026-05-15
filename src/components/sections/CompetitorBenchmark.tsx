@@ -198,9 +198,10 @@ export default function CompetitorBenchmark() {
 
   return (
     <>
-      <Card className="col-span-4" delay={0.65}>
-        <h3 className="text-lg font-semibold text-text-dark mb-1">Benchmark</h3>
-        <p className="text-sm text-text-light mb-4">Clique para análise detalhada</p>
+      <Card
+        delay={0.65}
+        title="Benchmark"
+        subtitle="Clique para análise detalhada">
 
         {/* Minha conta */}
         <div className="p-3 rounded-2xl bg-primary/8 border border-primary/20 mb-3">

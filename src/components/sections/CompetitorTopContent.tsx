@@ -288,37 +288,40 @@ export default function CompetitorTopContent() {
 
   return (
     <>
-    <Card className="col-span-12" delay={0.5}>
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h3 className="text-lg font-semibold text-text-dark">Top da Semana — Concorrentes</h3>
-          <p className="text-sm text-text-light mt-0.5">
-            3 posts com maior engajamento de cada perfil monitorado
-            {fetchedAt && (
-              <span className="ml-2 text-[11px] text-text-light/70">
-                · atualizado {formatDate(fetchedAt)}
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
+    <Card
+      delay={0.5}
+      title="Top da Semana — Concorrentes"
+      subtitle={
+        <span className="text-sm text-text-light">
+          3 posts com maior engajamento de cada perfil monitorado
+          {fetchedAt && (
+            <span className="ml-2 text-[11px] text-text-light/70">
+              · atualizado {formatDate(fetchedAt)}
+            </span>
+          )}
+        </span>
+      }
+      actions={
+        <div className="flex items-center gap-1">
+          <button type="button"
             onClick={() => setConfigOpen(true)}
-            className="flex items-center gap-1.5 text-xs text-text-light font-medium hover:opacity-70 transition-opacity cursor-pointer"
+            aria-label="Configurar perfis monitorados"
+            className="flex items-center gap-1.5 text-xs text-text-medium font-medium hover:bg-slate-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <Settings className="w-3.5 h-3.5" />
-            Configurar
+            <Settings className="w-3.5 h-3.5" aria-hidden="true"/>
+            <span className="hidden sm:inline">Configurar</span>
           </button>
-          <button
+          <button type="button"
             onClick={() => handleRefresh()}
             disabled={refreshing || loading}
-            className="flex items-center gap-1.5 text-xs text-primary font-medium hover:opacity-70 transition-opacity disabled:opacity-40 cursor-pointer"
+            aria-label="Atualizar dados agora"
+            className="flex items-center gap-1.5 text-xs text-primary font-medium hover:bg-primary/5 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-40 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Buscando…" : "Atualizar agora"}
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true"/>
+            <span className="hidden sm:inline">{refreshing ? "Buscando…" : "Atualizar"}</span>
           </button>
         </div>
-      </div>
+      }>
 
       {loading ? (
         <div className="flex items-center justify-center h-48 gap-3">

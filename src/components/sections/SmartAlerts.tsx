@@ -320,38 +320,37 @@ export default function SmartAlerts() {
 
   return (
     <>
-      <Card delay={0.3}>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-text-dark">Alertas Inteligentes</h3>
-            <p className="text-xs text-text-light mt-0.5">Clique para ver análise completa</p>
-          </div>
-          {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-        </div>
+      <Card
+        delay={0.3}
+        title="Alertas Inteligentes"
+        subtitle="Clique para ver análise completa"
+        actions={loading ? <Loader2 className="w-4 h-4 text-primary animate-spin" aria-label="Carregando"/> : null}>
 
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2.5" role="list">
           {alerts.map((alert, i) => {
             const Icon = iconMap[alert.tipo];
             return (
               <motion.button key={alert.id} type="button" onClick={() => setSelected(alert)}
+                role="listitem"
+                aria-label={`${alert.titulo} — ${alert.descricao}`}
                 initial={{ opacity: 0, x: 10 }} whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }} transition={{ delay: i * 0.08 }}
-                className={cn("flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer text-left w-full hover:shadow-sm group", borderMap[alert.tipo])}
+                className={cn("flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer text-left w-full hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 group", borderMap[alert.tipo])}
               >
                 <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0", colorMap[alert.tipo])}>
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-4 h-4" aria-hidden="true"/>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text-dark">{alert.titulo}</p>
-                  <p className="text-xs text-text-light mt-0.5 line-clamp-2">{alert.descricao}</p>
+                  <p className="text-sm font-medium text-text-dark leading-tight">{alert.titulo}</p>
+                  <p className="text-xs text-text-light mt-0.5 line-clamp-2 leading-relaxed">{alert.descricao}</p>
                   <p className="text-[10px] text-text-light/60 mt-1">{alert.tempo}</p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary transition-colors flex-shrink-0 mt-1" />
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary group-hover:translate-x-0.5 transition-all flex-shrink-0 mt-1" aria-hidden="true"/>
               </motion.button>
             );
           })}
           {!loading && alerts.length === 0 && (
-            <p className="text-sm text-text-light text-center py-4">Nenhum alerta no momento.</p>
+            <p className="text-sm text-text-light text-center py-6" role="status">Nenhum alerta no momento.</p>
           )}
         </div>
       </Card>

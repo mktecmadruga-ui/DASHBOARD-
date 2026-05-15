@@ -82,41 +82,42 @@ export default function AccountGrowth() {
   ] : [];
 
   return (
-    <Card delay={0.2}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-semibold text-text-dark">Crescimento da Conta</h3>
-          <p className="text-sm text-text-light mt-0.5">
-            {account.usuario} · dados reais via Instagram API
-          </p>
-        </div>
+    <Card
+      delay={0.2}
+      title="Crescimento da Conta"
+      subtitle={`${account.usuario} · dados reais via Instagram API`}
+      actions={
         <div className="flex items-center gap-1.5">
-          {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-          <div className="flex items-center gap-1 p-1 bg-slate-50 rounded-xl">
-            {periodosBtns.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPeriodId(p.id)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-                  period.id === p.id ? "bg-white text-primary shadow-card" : "text-text-light hover:text-text-medium"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+          {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" aria-label="Carregando"/>}
+          <div role="tablist" aria-label="Período de análise" className="flex items-center gap-0.5 p-1 bg-slate-50 rounded-xl">
+            {periodosBtns.map((p) => {
+              const isActive = period.id === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setPeriodId(p.id)}
+                  className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                    isActive ? "bg-white text-primary shadow-card" : "text-text-light hover:text-text-medium"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
         </div>
-      </div>
+      }>
 
       {/* Totals strip */}
       {statCards.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {statCards.map(({ icon: Icon, label, value, color, bg }) => (
             <div key={label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${bg}`}>
-              <Icon className={`w-3.5 h-3.5 ${color}`} />
-              <span className="text-xs font-semibold text-text-dark">{formatNumber(value)}</span>
+              <Icon className={`w-3.5 h-3.5 ${color}`} aria-hidden="true"/>
+              <span className="text-xs font-semibold text-text-dark tabular-nums">{formatNumber(value)}</span>
               <span className="text-[10px] text-text-light">{label}</span>
             </div>
           ))}

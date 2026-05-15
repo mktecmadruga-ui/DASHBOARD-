@@ -267,29 +267,29 @@ export default function TopContent() {
 
   return (
     <>
-      <Card className="col-span-8" delay={0.4}>
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 className="text-lg font-semibold text-text-dark">Top Conteúdos</h3>
-            <p className="text-sm text-text-light mt-0.5">Posts reais do @{account.usuario.replace("@", "")} — clique para análise</p>
-          </div>
+      <Card
+        delay={0.4}
+        title="Top Conteúdos"
+        subtitle={`Posts reais do @${account.usuario.replace("@", "")} — clique para análise`}
+        actions={
           <div className="flex items-center gap-2">
-            {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
+            {loading && <Loader2 className="w-4 h-4 text-primary animate-spin" aria-label="Carregando"/>}
             {!loading && media.length > 3 && (
-              <button onClick={() => setShowAll(!showAll)}
-                className="text-xs text-primary font-medium hover:opacity-70 transition-opacity cursor-pointer">
+              <button type="button" onClick={() => setShowAll(!showAll)}
+                aria-expanded={showAll}
+                className="text-xs text-primary font-medium hover:opacity-70 transition-opacity cursor-pointer px-2 py-1 rounded-lg hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
                 {showAll ? "Ver menos" : `Ver todos (${media.length})`}
               </button>
             )}
           </div>
-        </div>
+        }>
 
         {loading ? (
-          <div className="grid grid-cols-3 gap-4">
-            {[0,1,2].map((i) => <div key={i} className="rounded-2xl bg-slate-100 animate-pulse h-44" />)}
+          <div className="grid grid-cols-3 gap-4" aria-busy="true">
+            {[0,1,2].map((i) => <div key={i} className="rounded-2xl bg-slate-100 animate-pulse h-44" aria-hidden="true"/>)}
           </div>
         ) : top3.length === 0 ? (
-          <p className="text-sm text-text-light text-center py-8">Nenhum post encontrado.</p>
+          <p className="text-sm text-text-light text-center py-8" role="status">Nenhum post encontrado.</p>
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
