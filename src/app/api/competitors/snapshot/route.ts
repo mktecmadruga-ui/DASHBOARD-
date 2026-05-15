@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
         directUrls:    [`https://www.instagram.com/${handle}/`],
         resultsType:   "posts",
         resultsLimit:  20,
-        addParentData: false,
+        addParentData: true,
       }),
     }
   );
@@ -71,16 +71,46 @@ export async function POST(req: NextRequest) {
   }
 
   // Extract profile from first item
+  // With addParentData:true, profile fields come on each post item
   const first = items[0];
-  const followersCount = Number(first.followersCount ?? 0);
+  // Apify returns owner info in different keys depending on scraper version
+  const followersCount = Number(
+    first.followersCount ??
+    (first.ownerProfile as Record<string,unknown> | undefined)?.followersCount ??
+    0
+  );
   const profile = {
-    ownerFullName:  String(first.ownerFullName ?? handle),
+    ownerFullName:  String(
+      first.ownerFullName ??
+      (first.ownerProfile as Record<string,unknown> | undefined)?.fullName ??
+      handle
+    ),
     followersCount,
-    followingCount: Number(first.followingCount ?? 0),
-    postsCount:     Number(first.postsCount ?? 0),
-    biography:      String(first.biography ?? ""),
-    profilePicUrl:  String(first.profilePicUrl ?? ""),
-    verified:       Boolean(first.verified ?? false),
+    followingCount: Number(
+      first.followingCount ??
+      (first.ownerProfile as Record<string,unknown> | undefined)?.followingCount ??
+      0
+    ),
+    postsCount:     Number(
+      first.postsCount ??
+      (first.ownerProfile as Record<string,unknown> | undefined)?.postsCount ??
+      0
+    ),
+    biography:      String(
+      first.biography ??
+      (first.ownerProfile as Record<string,unknown> | undefined)?.biography ??
+      ""
+    ),
+    profilePicUrl:  String(
+      first.profilePicUrl ??
+      (first.ownerProfile as Record<string,unknown> | undefined)?.profilePicUrl ??
+      ""
+    ),
+    verified:       Boolean(
+      first.verified ??
+      (first.ownerProfile as Record<string,unknown> | undefined)?.verified ??
+      false
+    ),
   };
 
   // Map posts
