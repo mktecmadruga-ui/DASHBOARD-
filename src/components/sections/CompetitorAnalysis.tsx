@@ -146,7 +146,7 @@ function RewriteModal({ post, slug, competitorUsername, onClose }: {
           <div className="flex gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
             {post.thumbnailUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={post.thumbnailUrl} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+              <img src={`/api/proxy-image?url=${encodeURIComponent(post.thumbnailUrl)}`} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <p className="text-xs text-slate-500 line-clamp-3">{post.caption || "(sem legenda)"}</p>
@@ -306,7 +306,7 @@ function PostCard({ post, rank, slug, competitorUsername }: {
         <div className="relative">
           {post.thumbnailUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.thumbnailUrl} alt="" className="w-full h-32 rounded-xl object-cover" />
+            <img src={`/api/proxy-image?url=${encodeURIComponent(post.thumbnailUrl)}`} alt="" className="w-full h-32 rounded-xl object-cover" />
           ) : (
             <div className="w-full h-32 rounded-xl bg-slate-100 flex items-center justify-center">
               <Icon className="w-8 h-8 text-slate-300" />
@@ -451,7 +451,7 @@ export default function CompetitorAnalysis() {
         >
           {profile.profilePicUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={profile.profilePicUrl} alt="" className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+            <img src={`/api/proxy-image?url=${encodeURIComponent(profile.profilePicUrl)}`} alt="" className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
           ) : (
             <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
               <Users className="w-5 h-5 text-primary" />

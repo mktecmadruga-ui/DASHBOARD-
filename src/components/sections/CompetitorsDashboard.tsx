@@ -285,7 +285,7 @@ function PostCard({
         <div className="relative w-full aspect-square bg-slate-100 flex-shrink-0">
           {post.thumbnailUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.thumbnailUrl} alt="post" className="w-full h-full object-cover" />
+            <img src={`/api/proxy-image?url=${encodeURIComponent(post.thumbnailUrl)}`} alt="post" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Icon className="w-8 h-8 text-slate-300" />
@@ -651,7 +651,7 @@ export default function CompetitorsDashboard() {
                 {snapshot.profile.profilePicUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={snapshot.profile.profilePicUrl}
+                    src={`/api/proxy-image?url=${encodeURIComponent(snapshot.profile.profilePicUrl)}`}
                     alt={snapshot.username}
                     className="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-slate-100"
                   />
