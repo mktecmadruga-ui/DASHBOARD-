@@ -19,6 +19,7 @@ export const maxDuration = 60;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELEGRAM_BASE = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const ALLOWED_CHATS = (process.env.TELEGRAM_ALLOWED_CHATS ?? process.env.TELEGRAM_CHAT_ID_WILLIAM ?? "").split(",").map(s => s.trim()).filter(Boolean);
 
 // ─── Telegram API helpers ────────────────────────────────────────────────────
@@ -247,30 +248,20 @@ Retorne JSON com:
 }
 
 async function generateContent(tipo: string, slug: string, prompt: string): Promise<{ titulo: string; copy: string; legenda: string; hashtags: string[] } | null> {
-  if (!OPENAI_KEY) return null;
+  if (!ANTHROPIC_KEY) return null;
 
   const isWilliam = slug === "william";
   const account = isWilliam ? "William Madruga (contador, advogado e palestrante — perfil pessoal)" : "Madruga Contabilidade (escritório contábil que atende PMEs)";
   const tom = isWilliam ? "pessoal, especialista e acessível — William fala em primeira pessoa, traduz o técnico para o prático" : "profissional e confiável para PMEs — linguagem leve, foca no impacto no negócio do empresário";
   const tipoLabel = tipo === "reel" ? "Reel" : tipo === "carrossel" ? "Carrossel" : tipo === "story" ? "Story" : "Post de Feed";
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.85,
-      max_tokens: 1200,
-      response_format: { type: "json_object" },
-      messages: [{
-        role: "user",
-        content: `Você é um criador de conteúdo para Instagram da conta ${account}.
+  const userContent = `Você é um criador de conteúdo para Instagram da conta ${account}.
 Tom: ${tom}
 
 Crie um ${tipoLabel} com base no seguinte briefing:
 "${prompt}"
 
-Retorne APENAS JSON válido com estes campos:
+Retorne APENAS JSON válido com estes campos (sem markdown, sem código de bloco):
 {
   "titulo": "título interno curto para organização (máx 60 chars)",
   "copy": "${tipo === "reel" || tipo === "story" ? "roteiro completo do vídeo dividido por cenas: GANCHO (0-3s), desenvolvimento e CTA final — inclua o que aparece na tela e o que é falado" : "texto completo dos slides do carrossel, um slide por parágrafo"}",
@@ -278,15 +269,27 @@ Retorne APENAS JSON válido com estes campos:
   "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"]
 }
 
-Regras para hashtags: entre 5 e 8, sem o símbolo #, mix de específicas e amplas.`,
-      }],
-    }),
-  });
+Regras para hashtags: entre 5 e 8, sem o símbolo #, mix de específicas e amplas.`;
 
-  const json = await res.json();
-  const text = json.choices?.[0]?.message?.content ?? "{}";
   try {
-    const parsed = JSON.parse(text);
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1200,
+        messages: [{ role: "user", content: userContent }],
+      }),
+    });
+
+    const json = await res.json();
+    const text: string = json.content?.[0]?.text ?? "{}";
+    const clean = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+    const parsed = JSON.parse(clean);
     return {
       titulo: parsed.titulo ?? "",
       copy: parsed.copy ?? "",
@@ -310,8 +313,8 @@ async function processIdeaAndSave(opts: {
 }): Promise<void> {
   const { chat_id, slug, appUrl, rawIdea, extraContext, transcriptWarn } = opts;
 
-  if (!OPENAI_KEY) {
-    await sendMessage(chat_id, "❌ OPENAI_API_KEY não configurada.");
+  if (!ANTHROPIC_KEY) {
+    await sendMessage(chat_id, "❌ ANTHROPIC_API_KEY não configurada.");
     return;
   }
 
@@ -330,48 +333,45 @@ Público: empresários de todos os portes no Sul do Brasil.`;
 
   let ideaResult: { titulo?: string; tipo?: string; prompt?: string; justificativa?: string } = {};
   try {
-    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.8,
-        max_tokens: 1200,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: `Você é o assistente criativo de Instagram de: ${accountVoice}
+    const systemPrompt = `Você é o assistente criativo de Instagram de: ${accountVoice}
 
 Analise TODO o material recebido (transcrição, texto visível em artes, descrição visual, caption, áudio) e transforme em um briefing completo de produção.
 
 FORMATOS: reel | carrossel | story | feed
 
-RETORNE APENAS JSON VÁLIDO:
+RETORNE APENAS JSON VÁLIDO (sem markdown, sem bloco de código):
 {
   "titulo": "título interno chamativo que resume o conteúdo (máx 70 chars)",
-  "tipo": "reel" | "carrossel" | "story" | "feed",
+  "tipo": "reel",
   "prompt": "BRIEFING COMPLETO DE PRODUÇÃO com: (1) tema central e insight principal extraído do material, (2) gancho viral para os 3 primeiros segundos, (3) estrutura cena a cena para reel OU slide a slide para carrossel com timecodes/numeração, (4) tom emocional e linguagem, (5) CTA final. Mínimo 150 palavras. Use o conteúdo real analisado, não invente.",
   "justificativa": "por que esse formato e ângulo vão performar — cite elementos específicos do material analisado (1-2 frases)"
-}`,
-          },
-          {
-            role: "user",
-            content: contextParts.join("\n\n") || "Sem material enviado.",
-          },
-        ],
+}`;
+
+    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1200,
+        system: systemPrompt,
+        messages: [{ role: "user", content: contextParts.join("\n\n") || "Sem material enviado." }],
       }),
     });
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      throw new Error(`OpenAI ${aiRes.status}: ${errText.slice(0, 200)}`);
+      throw new Error(`Anthropic ${aiRes.status}: ${errText.slice(0, 200)}`);
     }
 
     const aiData = await aiRes.json();
-    const raw = aiData.choices?.[0]?.message?.content ?? "{}";
-    try { ideaResult = JSON.parse(raw); }
-    catch { const m = raw.match(/\{[\s\S]*\}/); ideaResult = m ? JSON.parse(m[0]) : {}; }
+    const raw: string = aiData.content?.[0]?.text ?? "{}";
+    const clean = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+    try { ideaResult = JSON.parse(clean); }
+    catch { const m = clean.match(/\{[\s\S]*\}/); ideaResult = m ? JSON.parse(m[0]) : {}; }
   } catch (e) {
     await sendMessage(chat_id, `❌ Erro na IA: ${e instanceof Error ? e.message : String(e)}`);
     return;

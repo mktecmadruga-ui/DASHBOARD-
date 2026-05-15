@@ -411,7 +411,10 @@ export default function ContentCalendar() {
       .catch(() => {/* keep fallback */});
   }, [slug]);
 
+  // Compute the initial week start on the client only to avoid SSR timezone mismatch
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(new Date()));
+  // Re-sync weekStart after hydration to guarantee client local timezone
+  useEffect(() => { setWeekStart(getMonday(new Date())); }, []);
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected]   = useState<CalendarEvent | null>(null);
 
@@ -443,7 +446,7 @@ export default function ContentCalendar() {
 
   // form fields
   const [titulo, setTitulo]           = useState("");
-  const [data,   setData]             = useState(toStr(new Date()));
+  const [data,   setData]             = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [tipo,   setTipo]             = useState<CalendarEvent["tipo"]>("reel");
   const [status, setStatus]           = useState<CalendarEvent["status"]>("agendado");
@@ -520,7 +523,22 @@ export default function ContentCalendar() {
   }
 
   const days     = Array.from({length:7},(_,i)=>{ const d=new Date(weekStart); d.setDate(weekStart.getDate()+i); return d; });
-  const todayStr = toStr(new Date());
+  // todayStr must be client-side to respect local timezone (Vercel server runs UTC)
+  const [todayStr, setTodayStr] = useState("");
+  useEffect(() => {
+    const update = () => {
+      const s = toStr(new Date());
+      setTodayStr(s);
+      // Seed form date field on first load only
+      setData(prev => prev === "" ? s : prev);
+    };
+    update();
+    // Refresh at midnight so "today" updates without page reload
+    const now = new Date();
+    const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
+    const t = setTimeout(() => { update(); }, msUntilMidnight);
+    return () => clearTimeout(t);
+  }, []);
 
   function prevWeek(){ setWeekStart(w=>{ const d=new Date(w); d.setDate(d.getDate()-7); return d; }); }
   function nextWeek(){ setWeekStart(w=>{ const d=new Date(w); d.setDate(d.getDate()+7); return d; }); }
