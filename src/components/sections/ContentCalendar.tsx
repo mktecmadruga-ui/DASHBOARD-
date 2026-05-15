@@ -161,13 +161,15 @@ function KanbanCard({ ev, statusDot, tipoOpts, onCardClick }: {
   );
 }
 
-function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick, onIdeaClick }: {
+function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick, onIdeaClick, onExportPdf, pdfLoading }: {
   col: KanbanCol;
   events: CalendarEvent[];
   statusDot: Record<string, string>;
   tipoOpts: { value: string; label: string }[];
   onCardClick: (ev: CalendarEvent) => void;
   onIdeaClick?: () => void;
+  onExportPdf?: () => void;
+  pdfLoading?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: col.status });
 
@@ -206,6 +208,17 @@ function KanbanColumn({ col, events, statusDot, tipoOpts, onCardClick, onIdeaCli
           className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 text-primary text-[11px] font-medium transition-all cursor-pointer">
           <Sparkles className="w-3 h-3"/>
           💡 Nova Ideia com IA
+        </button>
+      )}
+      {onExportPdf && events.length > 0 && (
+        <button
+          type="button"
+          onClick={onExportPdf}
+          disabled={pdfLoading}
+          className="mt-1 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-500 text-[11px] font-medium transition-all cursor-pointer disabled:opacity-50">
+          {pdfLoading
+            ? <><Loader2 className="w-3 h-3 animate-spin"/>Enviando PDF...</>
+            : <><Send className="w-3 h-3"/>📄 Enviar PDF pro Telegram</>}
         </button>
       )}
     </div>
@@ -401,6 +414,28 @@ export default function ContentCalendar() {
 
   // ── Generate full month ───────────────────────────────────────────────────
   const [genLoading,    setGenLoading]    = useState(false);
+
+  // ── Export PDF to Telegram ────────────────────────────────────────────────
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfToast,   setPdfToast]   = useState("");
+
+  async function exportPdf() {
+    setPdfLoading(true); setPdfToast("");
+    try {
+      const res  = await fetch("/api/calendar/export-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro ao gerar PDF");
+      setPdfToast(`✅ PDF enviado! ${json.count} rascunho${json.count !== 1 ? "s" : ""} no Telegram.`);
+      setTimeout(() => setPdfToast(""), 5000);
+    } catch (e) {
+      setPdfToast(`⚠️ ${e instanceof Error ? e.message : "Erro"}`);
+      setTimeout(() => setPdfToast(""), 6000);
+    } finally { setPdfLoading(false); }
+  }
   const [genDone,       setGenDone]       = useState(false);
   const [genError,      setGenError]      = useState("");
   const [genModalOpen,  setGenModalOpen]  = useState(false);
@@ -905,6 +940,17 @@ export default function ContentCalendar() {
             <button type="button" onClick={() => setGenError("")} className="ml-auto text-red-400 hover:text-red-600">×</button>
           </div>
         )}
+        {pdfToast && (
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-xl text-xs mb-3 border",
+            pdfToast.startsWith("✅")
+              ? "bg-green-50 border-green-100 text-green-700"
+              : "bg-red-50 border-red-100 text-red-600"
+          )}>
+            <span className="flex-1">{pdfToast}</span>
+            <button type="button" onClick={() => setPdfToast("")} className="opacity-50 hover:opacity-100">×</button>
+          </div>
+        )}
 
         {/* Generate month modal */}
         <AnimatePresence>
@@ -1080,6 +1126,8 @@ export default function ContentCalendar() {
                   tipoOpts={tipoOpts}
                   onCardClick={openEdit}
                   onIdeaClick={col.status === "rascunho" ? openIdeaModal : undefined}
+                  onExportPdf={col.status === "rascunho" ? exportPdf : undefined}
+                  pdfLoading={col.status === "rascunho" ? pdfLoading : undefined}
                 />
               ))}
             </div>
