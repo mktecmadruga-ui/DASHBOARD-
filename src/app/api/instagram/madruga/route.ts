@@ -1,9 +1,37 @@
 import { fetchProfile, fetchMedia } from "@/lib/instagram-api";
+import { getSupabase } from "@/lib/supabase";
 
-// Revalidate every 2 days (172800 seconds)
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Try today's snapshot first (populated by daily cron)
+  const sb = getSupabase();
+  if (sb) {
+    const { data: snap } = await sb
+      .from("instagram_snapshots")
+      .select("*")
+      .eq("slug", "madruga")
+      .eq("date", today)
+      .maybeSingle();
+
+    if (snap?.followers) {
+      return Response.json({
+        profile: {
+          followers_count: snap.followers,
+          follows_count:   snap.following,
+          media_count:     snap.media_count,
+          biography:       snap.biography,
+        },
+        media:     snap.media ?? [],
+        fromCache: true,
+        cachedAt:  snap.synced_at,
+      });
+    }
+  }
+
+  // Fallback: live fetch
   const [profile, media] = await Promise.all([
     fetchProfile("madruga"),
     fetchMedia("madruga", 20),
@@ -13,8 +41,5 @@ export async function GET() {
     return Response.json({ error: "Erro ao buscar dados do @madrugacontabilidade" }, { status: 500 });
   }
 
-  return Response.json(
-    { profile, media, cachedAt: new Date().toISOString() },
-    { headers: { "Cache-Control": "s-maxage=172800, stale-while-revalidate=86400" } }
-  );
+  return Response.json({ profile, media, fromCache: false, cachedAt: new Date().toISOString() });
 }
