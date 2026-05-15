@@ -1329,11 +1329,12 @@ export default function ContentCalendar() {
       </Card>
 
       {/* ─── Idea Modal ──────────────────────────────────────────────────── */}
-      <Modal open={ideaOpen} onClose={() => setIdeaOpen(false)} title="💡 Nova Ideia com IA">
+      <Modal
+        open={ideaOpen}
+        onClose={() => setIdeaOpen(false)}
+        title="Nova Ideia com IA"
+        description="Descreva sua ideia bruta (ou cole uma URL) e a IA estrutura um briefing pronto para virar rascunho.">
         <div className="flex flex-col gap-4">
-          <p className="text-xs text-text-light leading-relaxed">
-            Descreva sua ideia bruta (ou cole uma URL do YouTube) e a IA vai estruturar um briefing completo no estilo do William para usar como prompt na geração de conteúdo.
-          </p>
 
           {/* Ideia bruta */}
           <div>
@@ -1425,7 +1426,11 @@ export default function ContentCalendar() {
 
       {/* ─── Create / Edit Modal ─────────────────────────────────────────── */}
       <Modal open={modalOpen} onClose={()=>setModalOpen(false)}
-        title={selected?"Editar Conteúdo":"Novo Conteúdo"}>
+        size="lg"
+        title={selected?"Editar Conteúdo":"Novo Conteúdo"}
+        description={selected
+          ? `Edite roteiro, criativos e agendamento — ${selected.titulo}`
+          : "Preencha os detalhes do conteúdo. Use a IA para acelerar."}>
         <div className="flex flex-col gap-5 pb-2">
 
           {/* Alterações — change requests from William (HIGH PRIORITY, top of modal) */}

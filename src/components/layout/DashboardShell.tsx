@@ -6,13 +6,16 @@ import Header from "./Header";
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
+      {/* Skip-to-content link for keyboard users */}
+      <a href="#dashboard-main" className="skip-link">Pular para o conteúdo</a>
+
       <Sidebar />
-      <main className="flex-1 ml-72">
+      <div className="flex-1 ml-72 flex flex-col min-w-0">
         <Header />
-        <div id="dashboard-main" className="px-8 pb-8">
+        <main id="dashboard-main" tabIndex={-1} className="flex-1 px-6 lg:px-8 pb-10 focus:outline-none">
           {children}
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

@@ -30,27 +30,28 @@ export default function KPICard({ kpi, delay = 0 }: KPICardProps) {
   const formatter = kpi.formato === "porcentagem" ? formatPercent : formatNumber;
 
   return (
-    <motion.div
+    <motion.article
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.4, delay, ease: [0.22, 1, 0.36, 1] }}
-      className="bg-white rounded-3xl border border-slate-100 shadow-glass p-5 hover:shadow-glass-hover hover:-translate-y-1 transition-all duration-300"
+      aria-label={`${kpi.label}: ${formatter(kpi.valor)}, variação ${kpi.variacao}%`}
+      className="group bg-white rounded-3xl border border-slate-100 shadow-glass p-5 hover:shadow-glass-hover hover:-translate-y-1 transition-all duration-300"
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-          <Icon className="w-5 h-5 text-primary" />
+      <header className="flex items-start justify-between mb-3">
+        <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/15 transition-colors">
+          <Icon className="w-5 h-5 text-primary" aria-hidden="true" />
         </div>
         <Badge value={kpi.variacao} />
-      </div>
+      </header>
       <div className="mt-2">
         <AnimatedCounter
           value={kpi.valor}
           format={formatter}
-          className="text-3xl font-bold text-text-dark"
+          className="text-3xl font-bold text-text-dark tabular-nums leading-none"
         />
-        <p className="text-sm text-text-light mt-1">{kpi.label}</p>
+        <p className="text-sm text-text-light mt-1.5 leading-tight">{kpi.label}</p>
       </div>
-    </motion.div>
+    </motion.article>
   );
 }

@@ -6,23 +6,72 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background-color: #F5F7FB;
   color: #0F172A;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
+/* ── Focus visible (keyboard only) ─────────────────────────────────────── */
+*:focus { outline: none; }
+*:focus-visible {
+  outline: 2px solid #7B61FF;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Form elements get a subtler ring */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: #CBD5E1;
-  border-radius: 3px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; background-clip: padding-box; border: 2px solid transparent; }
+
+/* Thinner scrollbar inside scroll-heavy modals/panels */
+.modal-scroll::-webkit-scrollbar { width: 6px; }
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+
+/* ── Selection ────────────────────────────────────────────────────────── */
+::selection {
+  background-color: rgba(123, 97, 255, 0.2);
+  color: #1E1B4B;
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 @layer utilities {
   .gradient-primary {
@@ -40,5 +89,22 @@ body {
     background: rgba(15, 23, 42, 0.97);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
+  }
+
+  /* Skip-to-content link (a11y) — only visible on focus */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 9999;
+    padding: 0.75rem 1rem;
+    background: #7B61FF;
+    color: white;
+    border-radius: 0 0 0.75rem 0;
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+  .skip-link:focus {
+    left: 0;
   }
 }
