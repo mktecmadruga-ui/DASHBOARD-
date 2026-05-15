@@ -1,5 +1,6 @@
 import DashboardShell from "@/components/layout/DashboardShell";
 import ContentCalendar from "@/components/sections/ContentCalendar";
+import CompetitorAnalysis from "@/components/sections/CompetitorAnalysis";
 
 export default function CalendarioPage() {
   return (
@@ -10,6 +11,7 @@ export default function CalendarioPage() {
           <p className="text-sm text-text-light">Planeje, agende e acompanhe todo o conteúdo dos perfis.</p>
         </div>
         <ContentCalendar />
+        <CompetitorAnalysis />
       </div>
     </DashboardShell>
   );
