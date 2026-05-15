@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 import { useAccount } from "@/context/AccountContext";
 import {
   ChevronLeft, ChevronRight, Sparkles, Loader2,
-  Copy, Check, Hash, AlignLeft, FileText, Globe,
+  Copy, Check, Globe,
   Upload, X as XIcon, Image as ImageIcon, Clock, Send,
-  CheckCircle2, AlertCircle, Kanban,
+  CheckCircle2, AlertCircle, Kanban, FileText,
 } from "lucide-react";
 import type { CalendarEvent } from "@/types";
 import { createBrowserClient } from "@supabase/ssr";
@@ -78,7 +78,6 @@ const statusOpts: { value: CalendarEvent["status"]; label: string }[] = [
   { value:"publicado", label:"Publicado"      },
 ];
 
-type AITab = "copy"|"legenda"|"hashtags";
 
 function toStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -516,7 +515,7 @@ export default function ContentCalendar() {
         setScheduledAt(ev.scheduledAt ?? "");
         setTipo(ev.tipo); setStatus(ev.status); setPrompt(ev.prompt ?? "");
         setAiCopy(ev.copy ?? ""); setAiLegenda(ev.legenda ?? "");
-        setAiHashtags(ev.hashtags ?? []); setAiError(""); setActiveTab("copy");
+        setAiHashtags(ev.hashtags ?? []); setAiError("");
         setAiResearched(false); setAlteracoes(ev.alteracoes ?? "");
         const saved = ev.creatives ?? (ev.creative ? [{ dataUrl: ev.creative, name: ev.creativeName ?? "criativo" }] : []);
         setCreatives(saved);
@@ -556,7 +555,6 @@ export default function ContentCalendar() {
   const [aiLegenda,    setAiLegenda]    = useState("");
   const [aiHashtags,   setAiHashtags]   = useState<string[]>([]);
   const [aiResearched, setAiResearched] = useState(false);
-  const [activeTab,    setActiveTab]    = useState<AITab>("copy");
 
   const hasAI = !!(aiCopy || aiLegenda || aiHashtags.length);
 
@@ -648,7 +646,7 @@ export default function ContentCalendar() {
     setScheduledAt(ev.scheduledAt ?? "");
     setTipo(ev.tipo); setStatus(ev.status); setPrompt(ev.prompt ?? "");
     setAiCopy(ev.copy ?? ""); setAiLegenda(ev.legenda ?? "");
-    setAiHashtags(ev.hashtags ?? []); setAiError(""); setActiveTab("copy");
+    setAiHashtags(ev.hashtags ?? []); setAiError("");
     setAiResearched(false);
     const saved = ev.creatives ?? (ev.creative ? [{ dataUrl: ev.creative, name: ev.creativeName ?? "criativo" }] : []);
     setCreatives(saved);
@@ -683,7 +681,7 @@ export default function ContentCalendar() {
       if (!res.ok) throw new Error(json.error ?? "Erro desconhecido");
       setAiCopy(json.copy ?? ""); setAiLegenda(json.legenda ?? "");
       setAiHashtags(json.hashtags ?? []); setAiResearched(json.researchUsed ?? false);
-      setActiveTab("copy");
+      
     } catch(e: unknown) {
       setAiError(e instanceof Error ? e.message : "Erro ao gerar conteúdo");
     } finally { setAiLoading(false); }
@@ -1333,58 +1331,46 @@ export default function ContentCalendar() {
           {/* Resultado IA */}
           {hasAI && (
             <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}
-              className="border border-primary/20 rounded-2xl overflow-hidden bg-primary/3">
+              className="flex flex-col gap-4 pt-1">
               {aiResearched && (
-                <div className="flex items-center gap-1.5 px-3 py-2 bg-success/8 border-b border-success/15">
-                  <Globe className="w-3 h-3 text-success flex-shrink-0"/>
-                  <span className="text-[10px] text-success font-medium">Pesquisa web realizada — dados atuais incorporados</span>
+                <p className="text-[10px] text-success">✓ Pesquisa web realizada — dados atuais incorporados</p>
+              )}
+
+              {aiCopy && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-text-dark">Roteiro / Copy</span>
+                    <CopyBtn text={aiCopy}/>
+                  </div>
+                  <textarea value={aiCopy} onChange={e=>setAiCopy(e.target.value)}
+                    rows={10}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/20 resize-y bg-white font-mono"/>
                 </div>
               )}
-              <div className="flex border-b border-primary/15">
-                {([
-                  {id:"copy"     as AITab, label:"Roteiro",  icon:FileText },
-                  {id:"legenda"  as AITab, label:"Legenda",  icon:AlignLeft},
-                  {id:"hashtags" as AITab, label:"Hashtags", icon:Hash     },
-                ] as const).map(tab=>{
-                  const Icon=tab.icon;
-                  return (
-                    <button key={tab.id} type="button" onClick={()=>setActiveTab(tab.id)}
-                      className={cn("flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors cursor-pointer",
-                        activeTab===tab.id?"bg-primary/10 text-primary border-b-2 border-primary":"text-text-light hover:text-text-medium")}>
-                      <Icon className="w-3 h-3"/>{tab.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="p-3">
-                {activeTab==="copy" && (
-                  <div>
-                    <div className="flex justify-end mb-2"><CopyBtn text={aiCopy}/></div>
-                    <textarea value={aiCopy} onChange={e=>setAiCopy(e.target.value)} rows={8}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none bg-white"/>
+
+              {aiLegenda && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-text-dark">Legenda Instagram</span>
+                    <CopyBtn text={aiLegenda}/>
                   </div>
-                )}
-                {activeTab==="legenda" && (
-                  <div>
-                    <div className="flex justify-end mb-2"><CopyBtn text={aiLegenda}/></div>
-                    <textarea value={aiLegenda} onChange={e=>setAiLegenda(e.target.value)} rows={6}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none bg-white"/>
+                  <textarea value={aiLegenda} onChange={e=>setAiLegenda(e.target.value)}
+                    rows={5}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/20 resize-y bg-white"/>
+                </div>
+              )}
+
+              {aiHashtags.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-text-dark">Hashtags</span>
+                    <CopyBtn text={aiHashtags.map(h=>`#${h}`).join(" ")}/>
                   </div>
-                )}
-                {activeTab==="hashtags" && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-text-light">{aiHashtags.length} hashtags</span>
-                      <CopyBtn text={aiHashtags.map(h=>`#${h}`).join(" ")}/>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {aiHashtags.map((tag,i)=>(
-                        <span key={i} className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium">#{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+                  <p className="text-xs text-primary leading-relaxed">
+                    {aiHashtags.map(h=>`#${h}`).join("  ")}
+                  </p>
+                </div>
+              )}
             </motion.div>
           )}
 
