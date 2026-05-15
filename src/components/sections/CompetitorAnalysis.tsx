@@ -67,6 +67,7 @@ function RewriteModal({ post, slug, competitorUsername, onClose }: {
   const [expanded, setExpanded]   = useState<string | null>("copy");
   const [saving, setSaving]       = useState(false);
   const [saved, setSaved]         = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   async function rewrite() {
     setLoading(true); setError(""); setResult(null); setSaved(false);
@@ -86,7 +87,7 @@ function RewriteModal({ post, slug, competitorUsername, onClose }: {
 
   async function saveToRascunho() {
     if (!result) return;
-    setSaving(true);
+    setSaving(true); setSaveError("");
     try {
       const today = new Date().toISOString().slice(0, 10);
       const id    = `comp-${Date.now()}`;
@@ -103,15 +104,16 @@ function RewriteModal({ post, slug, competitorUsername, onClose }: {
         hashtags: Array.isArray(result.hashtags) ? result.hashtags.join(",") : null,
         prompt:   `Adaptado de @${competitorUsername} — gancho: ${result.hook ?? ""}`,
       };
-      const res = await fetch("/api/calendar", {
+      const res  = await fetch("/api/calendar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("Falha ao salvar");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Falha ao salvar");
       setSaved(true);
-    } catch {
-      // silent — button state reverts
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Erro ao salvar");
     } finally { setSaving(false); }
   }
 
@@ -235,6 +237,13 @@ function RewriteModal({ post, slug, competitorUsername, onClose }: {
                 </AnimatePresence>
               </div>
             ))}
+
+            {/* Save error */}
+            {saveError && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs">
+                <X className="w-3.5 h-3.5 flex-shrink-0" /> {saveError}
+              </div>
+            )}
 
             {/* Actions row */}
             <div className="flex gap-2">
