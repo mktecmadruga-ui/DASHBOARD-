@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Card from "@/components/ui/Card";
-import { Heart, MessageCircle, Play, Image, Layers, ExternalLink, Loader2, RefreshCw, TrendingUp, Settings, X, Plus, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Play, Image as ImageIcon, Layers, ExternalLink, Loader2, RefreshCw, TrendingUp, Settings, X, Plus, Trash2 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { useAccount } from "@/context/AccountContext";
 import type { CompetitorData, CompetitorPost } from "@/lib/apify";
 
-const mediaTypeIcon = { Image, Video: Play, Sidecar: Layers };
+const mediaTypeIcon = { Image: ImageIcon, Video: Play, Sidecar: Layers };
 const mediaTypeLabel = { Image: "Foto", Video: "Reel", Sidecar: "Carrossel" };
 
 const competitorColors: Record<string, { bg: string; border: string; text: string; dot: string }> = {
@@ -40,7 +40,7 @@ function PostCard({ post, rank, colors }: {
   rank: number;
   colors: typeof competitorColors[string];
 }) {
-  const Icon = mediaTypeIcon[post.mediaType] ?? Image;
+  const Icon = mediaTypeIcon[post.mediaType] ?? ImageIcon;
 
   return (
     <motion.a
@@ -142,7 +142,7 @@ function CompetitorColumn({ data, index }: { data: CompetitorData; index: number
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-40 rounded-2xl bg-slate-50 border border-dashed border-slate-200">
-          <Image className="w-6 h-6 text-slate-300 mb-2" />
+          <ImageIcon className="w-6 h-6 text-slate-300 mb-2" />
           <p className="text-xs text-text-light">Nenhum post encontrado</p>
         </div>
       )}

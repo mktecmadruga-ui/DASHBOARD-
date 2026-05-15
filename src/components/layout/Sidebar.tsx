@@ -7,7 +7,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import {
   LayoutDashboard, BarChart3, TrendingUp, Users, Heart,
   Zap, Filter, Sparkles, Target, Activity,
-  UserCheck, LogOut, ShieldCheck, CalendarDays,
+  LogOut, ShieldCheck, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AccountSwitcher from "@/components/ui/AccountSwitcher";

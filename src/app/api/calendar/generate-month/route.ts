@@ -43,7 +43,7 @@ function buildSchedule(year: number, month: number): { date: string; tipo: strin
   const schedule: { date: string; tipo: string; weekNum: number }[] = [];
   // Find first Monday of the month
   const firstDay = new Date(year, month - 1, 1);
-  let day = new Date(firstDay);
+  const day = new Date(firstDay);
   // Go to first Monday
   while (day.getDay() !== 1) day.setDate(day.getDate() + 1);
 
