@@ -158,25 +158,6 @@ export default function Sidebar() {
         <SectionLabel>Gestão</SectionLabel>
         <div className="flex flex-col gap-0.5">
           <Link
-            href="/leads"
-            className={cn(
-              "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative w-full",
-              isLeads
-                ? "text-white bg-white/10"
-                : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
-            )}
-          >
-            {isLeads && (
-              <span
-                className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 rounded-full bg-primary"
-                style={{ boxShadow: "0 0 10px rgba(123,97,255,0.7)" }}
-              />
-            )}
-            <UserCheck className="w-4 h-4 flex-shrink-0" />
-            <span>Leads</span>
-          </Link>
-
-          <Link
             href="/concorrentes"
             className={cn(
               "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative w-full",
