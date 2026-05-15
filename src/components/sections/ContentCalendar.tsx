@@ -312,6 +312,22 @@ function usePersistedEvents(slug: string) {
   return [events, setEvents] as const;
 }
 
+// ─── Section header (used inside modals) ─────────────────────────────────────
+function SectionHeader({ icon: Icon, title, hint }: {
+  icon?: React.ComponentType<{ className?: string }>;
+  title: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      {Icon && <Icon className="w-3.5 h-3.5 text-text-light"/>}
+      <span className="text-[10px] font-bold uppercase tracking-wider text-text-light">{title}</span>
+      {hint && <span className="text-[10px] text-text-light/70 font-normal normal-case tracking-normal">— {hint}</span>}
+      <div className="flex-1 h-px bg-slate-100 ml-1"/>
+    </div>
+  );
+}
+
 // ─── Filter chip ──────────────────────────────────────────────────────────────
 function FilterChip({ active, onClick, children }: {
   active: boolean;
@@ -1410,175 +1426,19 @@ export default function ContentCalendar() {
       {/* ─── Create / Edit Modal ─────────────────────────────────────────── */}
       <Modal open={modalOpen} onClose={()=>setModalOpen(false)}
         title={selected?"Editar Conteúdo":"Novo Conteúdo"}>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5 pb-2">
 
-          {/* Título */}
-          <div>
-            <label className="text-xs font-medium text-text-medium block mb-1.5">Título</label>
-            <input value={titulo} onChange={e=>setTitulo(e.target.value)}
-              placeholder="Ex: 5 erros na declaração do IR"
-              className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"/>
-          </div>
-
-          {/* Data + Tipo */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-text-medium block mb-1.5">Data</label>
-              <input type="date" value={data} onChange={e=>{
-                setData(e.target.value);
-                if (!scheduledAt) setScheduledAt(`${e.target.value}T18:00`);
-              }}
-                className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"/>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-text-medium block mb-1.5">Tipo</label>
-              <select value={tipo} onChange={e=>setTipo(e.target.value as CalendarEvent["tipo"])}
-                className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all bg-white cursor-pointer">
-                {tipoOpts.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Horário + Suggested times */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-medium text-text-medium flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-text-light"/>
-                Horário de publicação
-              </label>
-              <span className="text-[10px] text-text-light">Melhores horários (histórico real) →</span>
-            </div>
-            {/* Best-time chips — computed from real media engagement */}
-            <div className="flex gap-1.5 mb-2 flex-wrap">
-              {bestTimes.map(t => {
-                const isActive = scheduledAt.endsWith(t.value);
-                return (
-                  <button key={t.value} type="button"
-                    onClick={() => setScheduledAt(`${data || todayStr}T${t.value}`)}
-                    className={cn("flex flex-col items-center px-2.5 py-1.5 rounded-xl border text-[10px] font-medium transition-all cursor-pointer",
-                      isActive
-                        ? "gradient-primary text-white border-transparent shadow-sm"
-                        : "border-slate-200 text-text-medium hover:border-primary/30 hover:bg-primary/5")}>
-                    <span className="font-bold">{t.label}</span>
-                    <span className={cn("leading-tight", isActive ? "text-white/70" : "text-text-light")}>
-                      {t.tip}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <input type="datetime-local" value={scheduledAt} onChange={e=>setScheduledAt(e.target.value)}
-              className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"/>
-            <p className="text-[10px] text-text-light mt-1 flex items-center gap-1">
-              <Send className="w-3 h-3"/>
-              Quando status for &quot;Agendado&quot; e o horário chegar, o post será publicado automaticamente.
-            </p>
-          </div>
-
-          {/* Prompt / Ideia original */}
-          <div>
-            <label className="text-xs font-medium text-text-medium block mb-1.5 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-primary"/>
-              {prompt && selected?.status === "rascunho" ? "💡 Ideia original" : "Prompt para IA"}
-            </label>
-            <textarea value={prompt} onChange={e=>setPrompt(e.target.value)}
-              placeholder="Descreva: tema, tom, público-alvo, referências..."
-              rows={prompt && selected?.status === "rascunho" ? 4 : 3}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all resize-none placeholder:text-slate-300"/>
-          </div>
-
-          {/* Gerar IA */}
-          {prompt.trim() && titulo.trim() && (
-            <motion.button type="button" onClick={generateAI} disabled={aiLoading}
-              initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
-              className="w-full py-2.5 rounded-xl text-sm font-semibold gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-              {aiLoading
-                ? <><Loader2 className="w-4 h-4 animate-spin"/>Gerando conteúdo...</>
-                : <><Sparkles className="w-4 h-4"/>{hasAI?"Regenerar com IA":"Gerar com IA"}</>}
-            </motion.button>
-          )}
-
-          {aiError && (
-            <p className="text-xs text-danger bg-danger/5 border border-danger/20 rounded-xl px-3 py-2">{aiError}</p>
-          )}
-
-          {/* Resultado IA */}
-          {hasAI && (
-            <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}
-              className="flex flex-col gap-4 pt-1">
-              {aiResearched && (
-                <p className="text-[10px] text-success">✓ Pesquisa web realizada — dados atuais incorporados</p>
-              )}
-
-              {aiCopy && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-text-dark">Roteiro / Copy</span>
-                    <CopyBtn text={aiCopy}/>
-                  </div>
-                  <textarea value={aiCopy} onChange={e=>setAiCopy(e.target.value)}
-                    rows={10}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/20 resize-y bg-white font-mono"/>
-                </div>
-              )}
-
-              {aiLegenda && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-text-dark">Legenda Instagram</span>
-                    <CopyBtn text={aiLegenda}/>
-                  </div>
-                  <textarea value={aiLegenda} onChange={e=>setAiLegenda(e.target.value)}
-                    rows={5}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/20 resize-y bg-white"/>
-                </div>
-              )}
-
-              {aiHashtags.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-text-dark">Hashtags</span>
-                    <CopyBtn text={aiHashtags.map(h=>`#${h}`).join(" ")}/>
-                  </div>
-                  <p className="text-xs text-primary leading-relaxed">
-                    {aiHashtags.map(h=>`#${h}`).join("  ")}
-                  </p>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* Status */}
-          <div>
-            <label className="text-xs font-medium text-text-medium block mb-1.5">Status</label>
-            <div className="grid grid-cols-2 gap-2">
-              {statusOpts.map(s=>(
-                <button key={s.value} type="button" onClick={()=>setStatus(s.value)}
-                  className={cn("py-2 rounded-xl text-xs font-medium border transition-all cursor-pointer text-center",
-                    status===s.value?"bg-primary/10 border-primary/30 text-primary":"border-slate-200 text-text-light hover:bg-slate-50")}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-            {status === "agendado" && scheduledAt && (
-              <div className="flex items-center gap-1.5 mt-2 px-3 py-2 rounded-xl bg-success/8 border border-success/20">
-                <Send className="w-3 h-3 text-success flex-shrink-0"/>
-                <span className="text-[10px] text-success">
-                  Será publicado automaticamente em {new Date(scheduledAt).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Alterações — change requests from William */}
+          {/* Alterações — change requests from William (HIGH PRIORITY, top of modal) */}
           {alteracoes && (
             <motion.div initial={{opacity:0,y:4}} animate={{opacity:1,y:0}}
+              role="alert"
               className="border border-red-300/60 rounded-2xl overflow-hidden bg-red-50/60">
               <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border-b border-red-200/60">
-                <span className="text-red-600 text-xs">🔴</span>
+                <AlertCircle className="w-3.5 h-3.5 text-red-600 flex-shrink-0"/>
                 <span className="text-xs font-semibold text-red-700">Alterações solicitadas por William</span>
                 <button type="button" onClick={() => setAlteracoes("")}
-                  className="ml-auto text-red-400 hover:text-red-600 transition-colors cursor-pointer">
+                  aria-label="Marcar alterações como resolvidas"
+                  className="ml-auto text-red-400 hover:text-red-600 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-400/40 rounded">
                   <XIcon className="w-3.5 h-3.5"/>
                 </button>
               </div>
@@ -1588,20 +1448,207 @@ export default function ContentCalendar() {
             </motion.div>
           )}
 
-          {/* Criativos */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-text-medium flex items-center gap-1.5">
-                <ImageIcon className="w-3.5 h-3.5 text-text-light"/>
-                Criativos ({creatives.length}/10)
+          {/* ── Identidade ───────────────────────────────────────────── */}
+          <SectionHeader title="Identidade"/>
+          <div className="flex flex-col gap-3 -mt-1">
+            <div>
+              <label htmlFor="ev-titulo" className="text-xs font-medium text-text-medium block mb-1.5">
+                Título <span className="text-danger">*</span>
               </label>
-              {creatives.length < 10 && (
-                <button type="button" onClick={() => fileRef.current?.click()}
-                  className="flex items-center gap-1 text-xs text-primary font-medium hover:opacity-70 transition-opacity cursor-pointer">
-                  <Upload className="w-3 h-3"/> Adicionar
-                </button>
-              )}
+              <input
+                id="ev-titulo"
+                value={titulo}
+                onChange={e=>setTitulo(e.target.value)}
+                placeholder="Ex: 5 erros na declaração do IR"
+                aria-required="true"
+                className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"/>
             </div>
+
+            {/* Tipo as chip selector (replaces dropdown) */}
+            <div>
+              <label className="text-xs font-medium text-text-medium block mb-1.5">Tipo de conteúdo</label>
+              <div role="radiogroup" aria-label="Tipo de conteúdo" className="grid grid-cols-4 gap-1.5">
+                {tipoOpts.map(t => {
+                  const isActive = tipo === t.value;
+                  return (
+                    <button key={t.value} type="button" role="radio" aria-checked={isActive}
+                      onClick={() => setTipo(t.value)}
+                      className={cn(
+                        "py-2 rounded-xl text-xs font-medium border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30",
+                        isActive
+                          ? "bg-primary text-white border-primary shadow-sm"
+                          : "border-slate-200 text-text-medium hover:bg-slate-50"
+                      )}>
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Quando ─────────────────────────────────────────────── */}
+          <SectionHeader icon={Clock} title="Quando" hint="data e horário de publicação"/>
+          <div className="flex flex-col gap-3 -mt-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="ev-data" className="text-xs font-medium text-text-medium block mb-1.5">Data</label>
+                <input id="ev-data" type="date" value={data}
+                  onChange={e => {
+                    setData(e.target.value);
+                    if (!scheduledAt) setScheduledAt(`${e.target.value}T18:00`);
+                  }}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"/>
+              </div>
+              <div>
+                <label htmlFor="ev-time" className="text-xs font-medium text-text-medium block mb-1.5">Horário</label>
+                <input id="ev-time" type="datetime-local" value={scheduledAt} onChange={e=>setScheduledAt(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"/>
+              </div>
+            </div>
+
+            {/* Best-time chips — simplified */}
+            <div>
+              <p className="text-[10px] text-text-light mb-1.5">Sugestões de horário (do seu histórico real)</p>
+              <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Horários sugeridos">
+                {bestTimes.map(t => {
+                  const isActive = scheduledAt.endsWith(t.value);
+                  return (
+                    <button key={t.value} type="button"
+                      onClick={() => setScheduledAt(`${data || todayStr}T${t.value}`)}
+                      aria-pressed={isActive}
+                      title={t.tip}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30",
+                        isActive
+                          ? "bg-primary text-white border-primary shadow-sm"
+                          : "border-slate-200 text-text-medium hover:border-primary/30 hover:bg-primary/5"
+                      )}>
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <p className="text-[10px] text-text-light flex items-center gap-1">
+              <Send className="w-3 h-3"/>
+              Quando status for &quot;Agendado&quot; e o horário chegar, o post será publicado automaticamente.
+            </p>
+          </div>
+
+          {/* ── Conteúdo (IA) ──────────────────────────────────────── */}
+          <SectionHeader icon={Sparkles} title="Conteúdo" hint="ideia ou roteiro gerado pela IA"/>
+          <div className="flex flex-col gap-3 -mt-1">
+            <div>
+              <label htmlFor="ev-prompt" className="text-xs font-medium text-text-medium block mb-1.5">
+                {prompt && selected?.status === "rascunho" ? "Ideia original" : "Prompt para IA"}
+              </label>
+              <textarea
+                id="ev-prompt"
+                value={prompt}
+                onChange={e=>setPrompt(e.target.value)}
+                placeholder="Descreva: tema, tom, público-alvo, referências..."
+                rows={prompt && selected?.status === "rascunho" ? 4 : 3}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-text-dark focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all resize-none placeholder:text-slate-300"/>
+            </div>
+
+            {prompt.trim() && titulo.trim() && (
+              <motion.button type="button" onClick={generateAI} disabled={aiLoading}
+                initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                {aiLoading
+                  ? <><Loader2 className="w-4 h-4 animate-spin"/>Gerando conteúdo...</>
+                  : <><Sparkles className="w-4 h-4"/>{hasAI?"Regenerar com IA":"Gerar com IA"}</>}
+              </motion.button>
+            )}
+
+            {aiError && (
+              <p role="alert" className="text-xs text-danger bg-danger/5 border border-danger/20 rounded-xl px-3 py-2">{aiError}</p>
+            )}
+
+            {hasAI && (
+              <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}
+                className="flex flex-col gap-4">
+                {aiResearched && (
+                  <p className="text-[10px] text-success flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3"/> Pesquisa web realizada — dados atuais incorporados
+                  </p>
+                )}
+
+                {aiCopy && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="ev-copy" className="text-xs font-semibold text-text-dark">Roteiro / Copy</label>
+                      <CopyBtn text={aiCopy}/>
+                    </div>
+                    <textarea id="ev-copy" value={aiCopy} onChange={e=>setAiCopy(e.target.value)}
+                      rows={10}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/20 resize-y bg-white font-mono"/>
+                  </div>
+                )}
+
+                {aiLegenda && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="ev-legenda" className="text-xs font-semibold text-text-dark">Legenda Instagram</label>
+                      <CopyBtn text={aiLegenda}/>
+                    </div>
+                    <textarea id="ev-legenda" value={aiLegenda} onChange={e=>setAiLegenda(e.target.value)}
+                      rows={5}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs text-text-dark leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary/20 resize-y bg-white"/>
+                  </div>
+                )}
+
+                {aiHashtags.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-text-dark">Hashtags ({aiHashtags.length})</span>
+                      <CopyBtn text={aiHashtags.map(h=>`#${h}`).join(" ")}/>
+                    </div>
+                    <p className="text-xs text-primary leading-relaxed break-words">
+                      {aiHashtags.map(h=>`#${h}`).join("  ")}
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </div>
+
+          {/* ── Status ─────────────────────────────────────────────── */}
+          <SectionHeader title="Status" hint="onde está no fluxo de produção"/>
+          <div className="-mt-1">
+            <div role="radiogroup" aria-label="Status do conteúdo" className="grid grid-cols-5 gap-1">
+              {statusOpts.map(s => {
+                const isActive = status === s.value;
+                return (
+                  <button key={s.value} type="button" role="radio" aria-checked={isActive}
+                    onClick={() => setStatus(s.value)}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-[10px] font-medium transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30",
+                      isActive
+                        ? "bg-primary/10 border-primary/40 text-primary"
+                        : "border-slate-200 text-text-light hover:bg-slate-50"
+                    )}>
+                    <span className={cn("w-1.5 h-1.5 rounded-full", statusDot[s.value])} aria-hidden="true"/>
+                    <span className="leading-tight text-center">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {status === "agendado" && scheduledAt && (
+              <div className="flex items-center gap-1.5 mt-2 px-3 py-2 rounded-xl bg-success/8 border border-success/20" role="status">
+                <Send className="w-3 h-3 text-success flex-shrink-0"/>
+                <span className="text-[10px] text-success">
+                  Será publicado automaticamente em {new Date(scheduledAt).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Criativos ──────────────────────────────────────────── */}
+          <SectionHeader icon={ImageIcon} title={`Criativos (${creatives.length}/10)`} hint="imagens e vídeos"/>
+          <div className="-mt-1">
 
             {creatives.length > 0 && (
               <div className="grid grid-cols-2 gap-2 mb-2">
@@ -1682,44 +1729,64 @@ export default function ContentCalendar() {
             )}
           </div>
 
-          {/* Drive link — only for Reels */}
+          {/* ── Link do Drive (apenas Reels) ───────────────────────── */}
           {tipo === "reel" && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-text-medium flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5 text-slate-400"/>
-                Link do Drive (vídeo do Reel)
-              </label>
-              <input
-                type="url"
-                value={driveUrl}
-                onChange={e => setDriveUrl(e.target.value)}
-                placeholder="https://drive.google.com/..."
-                className="w-full px-3 py-2.5 rounded-xl text-sm border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-slate-300"
-              />
-            </div>
+            <>
+              <SectionHeader icon={Globe} title="Vídeo do Reel" hint="link do Drive"/>
+              <div className="-mt-1">
+                <label htmlFor="ev-drive" className="sr-only">Link do Drive</label>
+                <input
+                  id="ev-drive"
+                  type="url"
+                  value={driveUrl}
+                  onChange={e => setDriveUrl(e.target.value)}
+                  placeholder="https://drive.google.com/..."
+                  className="w-full h-10 px-3 rounded-xl text-sm border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all placeholder:text-slate-300"
+                />
+              </div>
+            </>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-1">
-            {selected && (
-              <button type="button" onClick={remove}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-danger/30 text-danger hover:bg-danger/5 transition-all cursor-pointer">
-                Excluir
+          {/* ── Sticky Action Footer ───────────────────────────────── */}
+          <div className="sticky bottom-0 -mx-1 px-1 pt-4 pb-1 bg-gradient-to-t from-white via-white to-white/95 border-t border-slate-100 mt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {selected && (
+                <button type="button" onClick={remove}
+                  aria-label="Excluir conteúdo"
+                  className="px-3 py-2.5 rounded-xl text-sm font-medium text-danger hover:bg-danger/5 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-danger/30">
+                  Excluir
+                </button>
+              )}
+
+              <button type="button" onClick={() => setModalOpen(false)}
+                className="ml-auto px-4 py-2.5 rounded-xl text-sm font-medium text-text-medium hover:bg-slate-50 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-300">
+                Cancelar
               </button>
-            )}
-            <button type="button" onClick={()=>setModalOpen(false)}
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-slate-200 text-text-medium hover:bg-slate-50 transition-all cursor-pointer">
-              Cancelar
-            </button>
-            <button type="button" onClick={save} disabled={!titulo.trim()}
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
-              {selected?"Salvar":"Criar"}
-            </button>
-            <button type="button" onClick={saveAndNotifyWilliam} disabled={!titulo.trim() || sending}
-              title="Salvar e enviar para William revisar no Telegram"
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-emerald-500 text-white cursor-pointer hover:bg-emerald-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
-              {sending ? "Enviando…" : sendResult === "ok" ? "✅ Enviado!" : sendResult === "error" ? "❌ Erro" : "📤 William"}
-            </button>
+
+              <button type="button" onClick={saveAndNotifyWilliam} disabled={!titulo.trim() || sending}
+                aria-label="Salvar e enviar para William revisar no Telegram"
+                className={cn(
+                  "flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed",
+                  sendResult === "ok"
+                    ? "bg-emerald-500 border-emerald-500 text-white"
+                    : sendResult === "error"
+                      ? "bg-red-50 border-red-300 text-red-600"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                )}>
+                {sending
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin"/>Enviando…</>
+                  : sendResult === "ok"
+                    ? <><CheckCircle2 className="w-3.5 h-3.5"/>Enviado!</>
+                    : sendResult === "error"
+                      ? <><AlertCircle className="w-3.5 h-3.5"/>Erro</>
+                      : <><Send className="w-3.5 h-3.5"/>Enviar pro William</>}
+              </button>
+
+              <button type="button" onClick={save} disabled={!titulo.trim()}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold gradient-primary text-white cursor-pointer hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary/40">
+                {selected ? "Salvar" : "Criar"}
+              </button>
+            </div>
           </div>
         </div>
       </Modal>
