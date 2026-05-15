@@ -40,8 +40,9 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
 
-  const isCalendar = pathname === "/calendario";
-  const isLeads    = pathname === "/leads";
+  const isCalendar     = pathname === "/calendario";
+  const isLeads        = pathname === "/leads";
+  const isConcorrentes = pathname === "/concorrentes";
 
   async function handleLogout() {
     const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -86,9 +87,9 @@ export default function Sidebar() {
         <div className="flex flex-col gap-0.5">
           {analyticsItems.map((item) => {
             const Icon     = item.icon;
-            const isActive = !isCalendar && !isLeads && active === item.id;
+            const isActive = !isCalendar && !isLeads && !isConcorrentes && active === item.id;
 
-            if (isCalendar || isLeads) {
+            if (isCalendar || isLeads || isConcorrentes) {
               // Navigate back to main page and scroll to section via hash
               return (
                 <Link
@@ -173,6 +174,25 @@ export default function Sidebar() {
             )}
             <UserCheck className="w-4 h-4 flex-shrink-0" />
             <span>Leads</span>
+          </Link>
+
+          <Link
+            href="/concorrentes"
+            className={cn(
+              "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative w-full",
+              isConcorrentes
+                ? "text-white bg-white/10"
+                : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+            )}
+          >
+            {isConcorrentes && (
+              <span
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 rounded-full bg-primary"
+                style={{ boxShadow: "0 0 10px rgba(123,97,255,0.7)" }}
+              />
+            )}
+            <TrendingUp className="w-4 h-4 flex-shrink-0" />
+            <span>Concorrentes</span>
           </Link>
         </div>
 
