@@ -6,8 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import {
   LayoutDashboard, BarChart3, TrendingUp, Users, Heart,
-  Zap, Filter, Sparkles, Calendar, Target, Activity,
-  UserCheck, LogOut, ShieldCheck, CalendarDays, ChevronLeft,
+  Zap, Filter, Sparkles, Target, Activity,
+  UserCheck, LogOut, ShieldCheck, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AccountSwitcher from "@/components/ui/AccountSwitcher";
@@ -82,46 +82,50 @@ export default function Sidebar() {
         {/* ── ANALYTICS ────────────────────────────── */}
         <SectionLabel>Analytics</SectionLabel>
 
-        {isCalendar ? (
-          /* When on /calendario, show a single "← Visão Geral" link */
-          <Link
-            href="/"
-            className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all duration-150 w-full"
-          >
-            <ChevronLeft className="w-4 h-4 flex-shrink-0" />
-            <span>Visão Geral</span>
-          </Link>
-        ) : (
-          /* Dashboard: full scroll-based nav */
-          <div className="flex flex-col gap-0.5">
-            {analyticsItems.map((item) => {
-              const Icon     = item.icon;
-              const isActive = active === item.id;
+        {/* All analytics items — on dashboard: scroll; on other pages: navigate back with hash */}
+        <div className="flex flex-col gap-0.5">
+          {analyticsItems.map((item) => {
+            const Icon     = item.icon;
+            const isActive = !isCalendar && !isLeads && active === item.id;
+
+            if (isCalendar || isLeads) {
+              // Navigate back to main page and scroll to section via hash
               return (
-                <button
+                <Link
                   key={item.id}
-                  type="button"
-                  onClick={() => scrollTo(item.sectionId, item.id)}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative cursor-pointer w-full text-left",
-                    isActive
-                      ? "text-white bg-white/10"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
-                  )}
+                  href={item.sectionId ? `/#${item.sectionId}` : "/"}
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all duration-150 w-full"
                 >
-                  {isActive && (
-                    <span
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 rounded-full bg-primary"
-                      style={{ boxShadow: "0 0 10px rgba(123,97,255,0.7)" }}
-                    />
-                  )}
                   <Icon className="w-4 h-4 flex-shrink-0" />
                   <span>{item.label}</span>
-                </button>
+                </Link>
               );
-            })}
-          </div>
-        )}
+            }
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => scrollTo(item.sectionId, item.id)}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative cursor-pointer w-full text-left",
+                  isActive
+                    ? "text-white bg-white/10"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                )}
+              >
+                {isActive && (
+                  <span
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 rounded-full bg-primary"
+                    style={{ boxShadow: "0 0 10px rgba(123,97,255,0.7)" }}
+                  />
+                )}
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
         {/* ── CONTEÚDO ─────────────────────────────── */}
         <SectionLabel>Conteúdo</SectionLabel>
