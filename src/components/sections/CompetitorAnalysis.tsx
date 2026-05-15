@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Loader2, Heart, MessageCircle, Play, Image, Layers,
   ExternalLink, Wand2, X, Copy, Check, TrendingUp, Users,
-  FileText, Video, LayoutGrid, ChevronDown, ChevronUp,
+  FileText, Video, LayoutGrid, ChevronDown, ChevronUp, BookmarkPlus,
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { useAccount } from "@/context/AccountContext";
@@ -61,13 +61,15 @@ function RewriteModal({ post, slug, competitorUsername, onClose }: {
   competitorUsername: string;
   onClose: () => void;
 }) {
-  const [loading, setLoading]   = useState(false);
-  const [result, setResult]     = useState<RewriteResult | null>(null);
-  const [error, setError]       = useState("");
-  const [expanded, setExpanded] = useState<string | null>("copy");
+  const [loading, setLoading]     = useState(false);
+  const [result, setResult]       = useState<RewriteResult | null>(null);
+  const [error, setError]         = useState("");
+  const [expanded, setExpanded]   = useState<string | null>("copy");
+  const [saving, setSaving]       = useState(false);
+  const [saved, setSaved]         = useState(false);
 
   async function rewrite() {
-    setLoading(true); setError(""); setResult(null);
+    setLoading(true); setError(""); setResult(null); setSaved(false);
     try {
       const res  = await fetch("/api/competitors/rewrite", {
         method: "POST",
@@ -80,6 +82,37 @@ function RewriteModal({ post, slug, competitorUsername, onClose }: {
       setExpanded("copy");
     } catch (e) { setError(e instanceof Error ? e.message : "Erro"); }
     finally { setLoading(false); }
+  }
+
+  async function saveToRascunho() {
+    if (!result) return;
+    setSaving(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const id    = `comp-${Date.now()}`;
+      const tipoMap: Record<string, string> = { reel: "reel", carrossel: "carrossel", feed: "feed" };
+      const body = {
+        id,
+        slug,
+        titulo:   result.titulo || `Adaptado de @${competitorUsername}`,
+        data:     today,
+        tipo:     tipoMap[result.tipo] ?? "reel",
+        status:   "rascunho",
+        legenda:  result.legenda ?? null,
+        copy:     result.copy ?? null,
+        hashtags: Array.isArray(result.hashtags) ? result.hashtags.join(",") : null,
+        prompt:   `Adaptado de @${competitorUsername} — gancho: ${result.hook ?? ""}`,
+      };
+      const res = await fetch("/api/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Falha ao salvar");
+      setSaved(true);
+    } catch {
+      // silent — button state reverts
+    } finally { setSaving(false); }
   }
 
   const accountLabel = slug === "william" ? "@williamnmadruga" : "@madrugacontabilidade";
@@ -203,16 +236,37 @@ function RewriteModal({ post, slug, competitorUsername, onClose }: {
               </div>
             ))}
 
-            {/* Redo button */}
-            <button
-              type="button"
-              onClick={rewrite}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50 transition-colors disabled:opacity-60"
-            >
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-              Gerar nova versão
-            </button>
+            {/* Actions row */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={rewrite}
+                disabled={loading || saving}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50 transition-colors disabled:opacity-60"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                Gerar nova versão
+              </button>
+
+              <button
+                type="button"
+                onClick={saveToRascunho}
+                disabled={saving || saved || loading}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl text-xs font-semibold transition-all disabled:opacity-60",
+                  saved
+                    ? "bg-green-50 border border-green-200 text-green-600"
+                    : "gradient-primary text-white"
+                )}
+              >
+                {saving
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : saved
+                    ? <Check className="w-3.5 h-3.5" />
+                    : <BookmarkPlus className="w-3.5 h-3.5" />}
+                {saved ? "Salvo nos Rascunhos!" : "Salvar nos Rascunhos"}
+              </button>
+            </div>
           </div>
         )}
       </motion.div>
